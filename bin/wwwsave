@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+
+require 'wwwsave/cli'
+
+wwwsave = WWWSave::CLI.start ARGV
