@@ -1,3 +1,4 @@
+require 'wwwsave/errors'
 require 'wwwsave/options'
 require 'wwwsave/scraper'
 
@@ -10,10 +11,15 @@ module WWWSave
         scraper.start
       rescue ArgumentError => error   # raised by WWWSave::Options
         puts error.message
+      rescue WWWSaveError => error    # raised by WWWSave::Scraper
+        puts error.message
+        puts error.nested_error.message if options.verbose
+        puts error.nested_error.backtrace if options.verbose
       rescue SocketError => error     # raised by net/http.rb
+        parts = options.url.split('/', 4)
+        puts "Cannot connect to #{parts[0]}//#{parts[2]}"
         puts error.message if options.verbose
         puts error.backtrace if options.verbose
-        puts 'No Internet connection.'
       end
     end
   end

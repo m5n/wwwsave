@@ -3,16 +3,23 @@ wwwsave
 
 Usage
 -----
-No login required:
+Simple:
 
     $ ./wwwsave http://www.somesite.com
+    $ ./wwwsave http://www.somesite.com/some/page.html
 
-Login required:
+With login:
 
+    $ ./wwwsave -s somesite -u thatsme http://somesite.com/users/thatsme
     $ ./wwwsave -s somesite -u thatsme -p $3cre3t http://thatsme.somesite.com
 
 
-Developer Setup
+Adding authentication for other sites
+-------------------------------------
+Copy one of the existing config/*.json files and provide values for the site you're interested in. Be careful to target elements that are visible.
+
+
+Developer setup
 ---------------
 If you don't have Ruby installed:
 
@@ -36,4 +43,4 @@ Install the gems this project relies on:
 
 Show the usage:
 
-    $ ./wwwsave.rb -h
+    $ ./wwwsave -h

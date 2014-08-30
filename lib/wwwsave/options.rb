@@ -21,7 +21,13 @@ module WWWSave
         'login' => false,
         'verbose' => false
       }
+
+      # Gather supported sites for authenticated access.
       known_site_ids = []
+      Dir.glob('config/*') do |file|
+        id = file.split(/\/|\./)[1]
+        known_site_ids.push id
+      end
 
       # Parse command line options.
       parser = OptionParser.new do |opts|
@@ -29,11 +35,7 @@ module WWWSave
 
         opts.separator ''
         opts.separator 'Use the "-s" option for authenticated access. These site IDs are supported:'
-
-        # Gather supported sites for authenticated access.
-        Dir.glob('config/*') do |file|
-          id = file.split(/\/|\./)[1]
-          known_site_ids.push id
+        known_site_ids.sort.each do |id|
           opts.separator "    #{id}"
         end
 
@@ -45,6 +47,7 @@ module WWWSave
           exit   # TODO: can control be passed back to main program?
         end
 
+        # TODO: remove -l, assume login if -u is present.
         opts.on('-l', '--[no-]login', 'Require login', "  (default: #{options['login']})") do |l|
           options['login'] = l
         end

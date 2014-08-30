@@ -1,7 +1,10 @@
-require 'mechanize'    # for automating website interaction
-require 'uri'          # for URL hostname and path extraction
-require 'json'         # for parsing JSON strings
-require 'fileutils'    # for creating an entire dir path in one go
+require 'watir-webdriver'   # for automating possibly AJAX-y login
+require 'mechanize'         # for automating website interaction
+require 'uri'               # for URL hostname and path extraction
+require 'json'              # for parsing JSON strings
+require 'fileutils'         # for creating an entire dir path in one go
+
+require 'wwwsave/errors'
 
 module WWWSave
   class Scraper
@@ -35,7 +38,14 @@ module WWWSave
       capture_start
 
       # Do login before creating directories as an error could still occur.
-      login if @options.login
+      begin
+        login if @options.login
+      rescue Watir::Wait::TimeoutError => error
+        raise LoginError.new(error), 'Unable to log in'
+      rescue Selenium::WebDriver::Error => error
+        # Same code as above; refactor!
+        raise LoginError.new(error), 'Unable to log in'
+      end
 
       init_output_dir
 
@@ -64,18 +74,24 @@ log "Page: #{url}"
 log "Base: #{base}"
 log "Path: #{path}"
 
-      page = get_page url
-      process_content page
+      begin
+        page = get_page url
+        process_content page
 
-      path = "#{@options.output_dir}#{path}"
-      path += 'index.html' if path[-1] == '/'
-      FileUtils.mkpath File.dirname(path) if !Dir.exists? File.dirname(path)
-      log "Saving: #{path}"
-      page.save_as path
+        path = "#{@options.output_dir}#{path}"
+        path += 'index.html' if path[-1] == '/'
+        FileUtils.mkpath File.dirname(path) if !Dir.exists? File.dirname(path)
+        log "Saving: #{path}"
+        page.save_as path
+      rescue Mechanize::ResponseCodeError => error
+        puts "An error occured. Skipping #{url}"
+        puts error.message if @options.verbose
+        puts error.backtrace if @options.verbose
+      end
     end
 
     def get_page(url)
-      puts "Getting: #{url}"
+      puts "Retrieving: #{url}"
       @agent.get url
     end
 
@@ -89,7 +105,7 @@ log "Path: #{path}"
     def capture_start
       @start_time = Time.now
       log "Start: #{@start_time}"
-      puts "Saving content to \"#{File.join '.', @options.output_dir}\""
+      puts "Going to save content to \"#{File.join '.', @options.output_dir}\""
     end
 
     def capture_finish
@@ -101,15 +117,27 @@ log "Path: #{path}"
 
     def login
       log 'Logging in'
-      page = get_page @options.login_page
-      page = page.form_with(:action => @options.login_form_action) do |form|
-        form[@options.login_form_username_field] = @options.username
-        form[@options.login_form_password_field] = @options.password
-      end.click_button
 
-      # Report error if any.
-      errorText = page.search(@options.login_error_text_selector).text
-      abort errorText if errorText.length > 0
+      browser = Watir::Browser.new
+      browser.goto @options.login_page
+      current_url = browser.url
+
+      form = browser.element(:css => @options.login_form_selector)
+
+      form.text_field(:name => @options.login_form_username_field_name).when_present.set @options.username
+      form.text_field(:name => @options.login_form_password_field_name).when_present.set @options.password
+      form.element(:css => @options.login_form_submit_button_selector).when_present.click
+
+      Watir::Wait.until { browser.elements(:css => @options.login_error_text_selector).length > 0 || browser.url != current_url }
+
+      if browser.url == current_url
+        errorText = browser.element(:css => @options.login_error_text_selector).text
+        abort errorText
+      else
+        puts 'login success!'
+      end
+
+      # TODO: eventually: browser.close
     end
 
     def init_output_dir
@@ -125,7 +153,7 @@ log "Path: #{path}"
 
       # Output info about this copy.
       File.open "#{@options.output_dir}/README", 'w' do |f|
-        f.puts "#{@cmd} - https://github.com/m5n/#{@cmd}"
+        f.puts "Thank you for using #{@cmd} - https://github.com/m5n/#{@cmd}"
         f.puts
         f.puts "Site: #{@options.url}"
         f.puts "User: #{@options.username}" if @options.login
