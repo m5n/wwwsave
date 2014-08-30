@@ -9,24 +9,29 @@ module WWWSave
     def initialize(argv)
       @options = parse argv
 
-      # Username is required if login is requested.
-      assert_username if @options['login']
+      # Auth scheme was used to read properties file, so remove from options.
+      # Replace it with a "login required" indicator.
+      @options['login_required'] = !@options.delete('auth_scheme').nil?
 
-      # Ask for password if needed.
-      read_password if @options['login'] && !@options.has_key?('password')
+      if @options['login_required']
+        # Username is required if an authentication scheme is in effect.
+        assert_username
+
+        # Ask for password if needed.
+        read_password if !@options.has_key?('password')
+      end
     end
 
     def parse(argv)
       options = {
-        'login' => false,
         'verbose' => false
       }
 
       # Gather supported sites for authenticated access.
-      known_site_ids = []
+      known_auth_schemes = []
       Dir.glob('config/*') do |file|
         id = file.split(/\/|\./)[1]
-        known_site_ids.push id
+        known_auth_schemes.push id
       end
 
       # Parse command line options.
@@ -34,8 +39,8 @@ module WWWSave
         opts.banner = "Usage: #{$0.split('/').last} [options] url"
 
         opts.separator ''
-        opts.separator 'Use the "-s" option for authenticated access. These site IDs are supported:'
-        known_site_ids.sort.each do |id|
+        opts.separator 'Use the "-s" option with any of these authentication schemes:'
+        known_auth_schemes.sort.each do |id|
           opts.separator "    #{id}"
         end
 
@@ -47,24 +52,19 @@ module WWWSave
           exit   # TODO: can control be passed back to main program?
         end
 
-        # TODO: remove -l, assume login if -u is present.
-        opts.on('-l', '--[no-]login', 'Require login', "  (default: #{options['login']})") do |l|
-          options['login'] = l
-        end
-
         opts.on('-o', '--outputdir [DIRECTORY]', 'Set directory to save pages to', "  (default: \"./saved-<web site ID>\"") do |o|
           options['output_dir'] = o if !o.nil?
         end
 
         opts.on('-p', '--password [PASSWORD]',
                 'Set password',
-                '  (to enter it without revealing your',
-                '   plaintext password, leave unspecified)') do |p|
+                '  (to be prompted while keeping your',
+                '   password concealed, leave unspecified)') do |p|
           options['password'] = p if !p.nil?
         end
 
-        opts.on('-s', '--siteid [SITEID]', 'Use specific Web site configuration', '  (allows authentication)') do |s|
-          options['site_id'] = s if !s.nil?
+        opts.on('-s', '--scheme [AUTH_SCHEME]', 'Enable Web site authentication') do |s|
+          options['auth_scheme'] = s if !s.nil?
         end
 
         opts.on('-u', '--username [USERNAME]', 'Set username') do |u|
@@ -86,8 +86,8 @@ module WWWSave
       raise ArgumentError, 'Incorrect number of arguments. Use -h for usage.' if argv.length != 1
       options['url'] = argv.shift
 
-      # Validate site ID.
-      raise ArgumentError, 'Unknown site id. Use -h for usage.' if options.has_key?('site_id') && !known_site_ids.include?(options['site_id'])
+      # Validate authentication scheme.
+      raise ArgumentError, 'Unknown authentication scheme. Use -h for usage.' if options.has_key?('auth_scheme') && !known_auth_schemes.include?(options['auth_scheme'])
 
       # Validate URL.
       begin
@@ -101,14 +101,13 @@ module WWWSave
 
       # Now the output dir can be set if it wasn't passed as an option.
       if !options.has_key? 'output_dir'
-        id = options['site_id']
         # Extract site identifier from URL if no site ID was passed in.
-        options['output_dir'] = "saved-#{options['site_id'] || uri.host}"
+        options['output_dir'] = "saved-#{options['auth_scheme'] || uri.host}"
       end
 
-      if options.has_key? 'site_id'
+      if options.has_key? 'auth_scheme'
         # Augment with web site specific properties.
-        site_options = JSON.load IO.read "config/#{options['site_id']}.json"
+        site_options = JSON.load IO.read "config/#{options['auth_scheme']}.json"
         site_options.each do |k, v|
           options[k] = v if !options.has_key? k
         end

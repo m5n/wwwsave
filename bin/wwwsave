@@ -2,4 +2,4 @@
 
 require 'wwwsave/cli'
 
-wwwsave = WWWSave::CLI.start ARGV
+WWWSave::CLI.start ARGV

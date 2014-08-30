@@ -8,9 +8,12 @@ Simple:
     $ ./wwwsave http://www.somesite.com
     $ ./wwwsave http://www.somesite.com/some/page.html
 
-With login:
+With authenticated access, but prompt for password (so it remains concealed):
 
     $ ./wwwsave -s somesite -u thatsme http://somesite.com/users/thatsme
+
+With fully automated authenticated access:
+
     $ ./wwwsave -s somesite -u thatsme -p $3cre3t http://thatsme.somesite.com
 
 

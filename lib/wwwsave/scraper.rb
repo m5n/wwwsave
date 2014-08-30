@@ -39,7 +39,7 @@ module WWWSave
 
       # Do login before creating directories as an error could still occur.
       begin
-        login if @options.login
+        login if @options.login_required
       rescue Watir::Wait::TimeoutError => error
         raise LoginError.new(error), 'Unable to log in'
       rescue Selenium::WebDriver::Error => error
@@ -130,11 +130,10 @@ log "Path: #{path}"
 
       Watir::Wait.until { browser.elements(:css => @options.login_error_text_selector).length > 0 || browser.url != current_url }
 
+      # TODO: not all sites redirect after successful login, e.g. LJ.
       if browser.url == current_url
         errorText = browser.element(:css => @options.login_error_text_selector).text
         abort errorText
-      else
-        puts 'login success!'
       end
 
       # TODO: eventually: browser.close
@@ -156,7 +155,7 @@ log "Path: #{path}"
         f.puts "Thank you for using #{@cmd} - https://github.com/m5n/#{@cmd}"
         f.puts
         f.puts "Site: #{@options.url}"
-        f.puts "User: #{@options.username}" if @options.login
+        f.puts "User: #{@options.username}" if @options.login_required
         f.puts "Date: #{Time.now}"
       end
     end
