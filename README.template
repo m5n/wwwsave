@@ -5,40 +5,7 @@ STILL A WORK IN PROGRESS
 
 Usage
 -----
-Usage: wwwsave [options] url
-
-Specific options:
-
-    -h, --help                       Show this message
-    -o, --outputdir [DIRECTORY]      Set directory to save pages to
-                                         (default: "./wwwsave-<web site ID>"
-    -p, --password [PASSWORD]        Set password
-    -s, --scheme [AUTH_SCHEME]       Enable Web site authentication (see below)
-    -u, --username [USERNAME]        Set username
-    -v, --[no-]verbose               Run verbosely
-                                         (default: false)
-        --version                    Show version
-
-
-Simple example:
-
-    $ ./wwwsave http://www.somesite.com
-    $ ./wwwsave http://www.somesite.com/some/page.html
-
-With authenticated access (prompts for password so it's not exposed):
-
-    $ ./wwwsave -s somesite -u thatsme http://somesite.com/users/thatsme
-
-With fully automated authenticated access (exposes paintext password):
-
-    $ ./wwwsave -s somesite -u thatsme -p $3cre3t http://thatsme.somesite.com
-
-
-The following authentication schemes are supported (use with the "-s" option):
-
-    livejournal
-    pinterest
-
+{{usage}}
 
 Adding authentication for other sites
 -------------------------------------

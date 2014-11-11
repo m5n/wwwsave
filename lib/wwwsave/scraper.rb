@@ -1,8 +1,9 @@
-require 'watir-webdriver'   # for automating possibly AJAX-y login
-require 'mechanize'         # for automating website interaction
-require 'uri'               # for URL hostname and path extraction
-require 'json'              # for parsing JSON strings
-require 'fileutils'         # for creating an entire dir path in one go
+require 'fileutils'   # for creating an entire dir path in one go
+require 'json'        # for parsing JSON strings
+require 'nokogiri'    # for parsing HTML documents
+require 'open-uri'    # for downloading page resources
+require 'uri'         # for parsing URLs
+require 'watir'       # for automating possibly JavaScript-driven login
 
 require 'wwwsave/errors'
 
@@ -11,94 +12,104 @@ module WWWSave
     def initialize(options)
       @cmd = $0.split('/').last
       @options = options
-      @agent = Mechanize.new
-
-      # Set absolute base URL, for content URLs starting with "/".
-      # Don't use URI as we don't want to include port if it wasn't specified.
-      parts = @options.url.split('/', 4)
-      @abs_base_url = "#{parts[0]}//#{parts[2]}"
-
-      # Set relative base URL, for content URLs NOT starting with "/".
-      uri = URI @options.url
-      if parts.length == 3
-        @rel_base_url = @abs_base_url
-      elsif uri.path[-1] == '/' || !uri.path.split('/')[-1].include?('.')
-        @rel_base_url = "#{@abs_base_url}#{uri.path}"
-      else
-        @rel_base_url = "#{@abs_base_url}#{File.dirname uri.path}"
-      end
+      @uri = URI.parse @options.url
+      @seen_first_page = false
 
       log "Options: #{@options}"
-      log "User-provided URL: #{@options.url}"
-      log "Absolute base URL: #{@abs_base_url}"
-      log "Relative base URL: #{@rel_base_url}"
     end
 
     def start
       capture_start
+      @browser = Watir::Browser.new
 
       # Do login before creating directories as an error could still occur.
-      begin
-        login if @options.login_required
-      rescue Watir::Wait::TimeoutError => error
-        raise LoginError.new(error), 'Unable to log in'
-      rescue Selenium::WebDriver::Error => error
-        # Same code as above; refactor!
-        raise LoginError.new(error), 'Unable to log in'
-      end
+      login if @options.login_required
 
       init_output_dir
+      save_page @uri
 
-      save_page @options.url
+      logout if @options.login_required
 
-      # TODO: do this only if depth alone is not enough
-      #@options.pages_to_save.each do |p|
-      #  save_page "#{@options.url}/#{p}"
-      #end
-
+      @browser.close
       capture_finish
     end
 
-    def save_page(url)
-      parts = url.split('/', 4)
-      uri = URI url
-      if uri.scheme.nil?
-        base = uri.path[0] == '/' ? @abs_base_url : @rel_base_url
-      else
-        base = "#{parts[0]}//#{parts[2]}"
-      end
-      path = uri.path.empty? ? '/' : uri.path
+    def save_page(uri)
+      path = local_path uri
+      path = "#{@options.output_dir}#{path}"
+      path += 'index.html' if path[-1] == '/'
 
-log "Save_page:"
-log "Page: #{url}"
-log "Base: #{base}"
-log "Path: #{path}"
+      log 'Save_page:'
+      log "Page: #{uri}"
+      log "As: #{path}"
 
       begin
-        page = get_page url
-        process_content page
+        first_time = !@seen_first_page
+        page = get_page uri
+        uri = @uri if first_time
+        process_content uri, page
 
-        path = "#{@options.output_dir}#{path}"
-        path += 'index.html' if path[-1] == '/'
         FileUtils.mkpath File.dirname(path) if !Dir.exists? File.dirname(path)
         log "Saving: #{path}"
-        page.save_as path
-      rescue Mechanize::ResponseCodeError => error
-        puts "An error occured. Skipping #{url}"
+        File.open(path, 'w') { |f| page.write_html_to f }
+      rescue Exception => error   # TODO: something more specific?
+        puts "An error occured. Skipping #{uri}"
         puts error.message if @options.verbose
         puts error.backtrace if @options.verbose
       end
     end
 
-    def get_page(url)
-      puts "Retrieving: #{url}"
-      @agent.get url
+    def get_page(uri)
+      puts "Retrieving: #{uri}"
+      @browser.goto uri.to_s
+
+      if !@seen_first_page
+        log "Update site URI from \"#{@uri}\" to \"#{@browser.url}\""
+        @uri = URI.parse @browser.url
+        @seen_first_page = true
+      end
+
+      Nokogiri::HTML(@browser.html) do |config|
+        config.strict.nonet.noblanks
+      end
     end
 
-    def process_content(page)
-      page.search('img[src], script[src]').each do |item|
-        puts item
-        puts item['src']
+    def process_content(page_uri, page)
+      page.search('link[href], img[src], script[src]').each do |item|
+        begin
+          url = item['src'] || item['href']
+          ref_uri = page_uri.merge url
+          save_as = new_ref = local_path ref_uri
+          save_as = "#{@options.output_dir}#{save_as}"
+          save_as += 'index.html' if save_as[-1] == '/'
+          new_ref = ".#{new_ref}"
+          new_ref += 'index.html' if new_ref[-1] == '/'
+
+          log ''
+          log 'Process_content:'
+          log "Ref: #{url}"
+          log "URI: #{ref_uri}"
+
+          if File.exists? save_as
+            log "Already saved: #{save_as}"
+          else
+            log "Save as: #{save_as}"
+
+            # Save page resources "as is".
+            FileUtils.mkpath File.dirname(save_as) if !Dir.exists? File.dirname(save_as)
+            File.open(save_as, 'wb') do |f|
+              f.write open(ref_uri).read
+              # TODO: process CSS, e.g. background:url(/assets/...)
+            end
+          end
+
+          # Change reference to resource in page.
+          item['src'] ? item['src'] = new_ref : item['href'] = new_ref
+        rescue Exception => error   # TODO: something more specific?
+          puts "An error occured. Skipping #{ref_uri}"
+          puts error.message if @options.verbose
+          puts error.backtrace if @options.verbose
+        end
       end
     end
 
@@ -112,31 +123,42 @@ log "Path: #{path}"
       end_time = Time.now
       elapsed = end_time.to_i - @start_time.to_i
       log "End: #{end_time}. Elapsed: #{elapsed / 60}m#{elapsed - (elapsed / 60) * 60}s"
-      puts "Done!"
+      puts 'Done!'
     end
 
     def login
       log 'Logging in'
 
-      browser = Watir::Browser.new
-      browser.goto @options.login_page
-      current_url = browser.url
+      begin
+        @browser.goto @options.login_page
+        current_url = @browser.url
 
-      form = browser.element(:css => @options.login_form_selector)
+        form = @browser.element(:css => @options.login_form_selector)
 
-      form.text_field(:name => @options.login_form_username_field_name).when_present.set @options.username
-      form.text_field(:name => @options.login_form_password_field_name).when_present.set @options.password
-      form.element(:css => @options.login_form_submit_button_selector).when_present.click
+        form.text_field(:name => @options.login_form_username_field_name).when_present.set @options.username
+        form.text_field(:name => @options.login_form_password_field_name).when_present.set @options.password
+        form.element(:css => @options.login_form_submit_button_selector).when_present.click
 
-      Watir::Wait.until { browser.elements(:css => @options.login_error_text_selector).length > 0 || browser.url != current_url }
+        Watir::Wait.until { @browser.elements(:css => @options.login_error_text_selector).length > 0 || @browser.url != current_url }
 
-      # TODO: not all sites redirect after successful login, e.g. LJ.
-      if browser.url == current_url
-        errorText = browser.element(:css => @options.login_error_text_selector).text
-        abort errorText
+        # TODO: not all sites redirect after successful login, e.g. LJ.
+        if @browser.url == current_url
+          log 'Login error'
+          errorText = @browser.element(:css => @options.login_error_text_selector).text
+          abort errorText
+        end
+      rescue Watir::Wait::TimeoutError => error
+        raise LoginError.new(error), 'Unable to log in'
+      rescue Selenium::WebDriver::Error => error
+        # Same code as above; refactor!
+        raise LoginError.new(error), 'Unable to log in'
       end
 
-      # TODO: eventually: browser.close
+      log 'Login success'
+    end
+
+    def logout
+      # TODO: log out if @options.login_required
     end
 
     def init_output_dir
@@ -157,6 +179,21 @@ log "Path: #{path}"
         f.puts "Site: #{@options.url}"
         f.puts "User: #{@options.username}" if @options.login_required
         f.puts "Date: #{Time.now}"
+      end
+    end
+
+    def local_path(uri)
+      clone = URI.parse uri.to_s
+      clone.scheme = @uri.scheme   # Avoid port mismatch due to scheme.
+
+      if "#{clone.host}:#{clone.port}" == "#{@uri.host}:#{@uri.port}"
+p "1"
+        clone.scheme = clone.host = clone.port = nil
+        clone.to_s.empty? ? '/' : clone.to_s
+      else
+p "2"
+        clone.scheme = nil
+        clone.to_s[1..-1]   # Avoid path starting with "//".
       end
     end
 

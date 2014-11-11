@@ -1,8 +1,8 @@
-require 'wwwsave/version'
-
-require 'optparse'     # for parsing command line options
 require 'io/console'   # for echo-less password input
+require 'optparse'     # for parsing command line options
 require 'uri'          # for URL validation and hostname extraction
+
+require 'wwwsave/version'
 
 module WWWSave
   class Options
@@ -23,6 +23,8 @@ module WWWSave
     end
 
     def parse(argv)
+      cmd = $0.split('/').last
+
       options = {
         'verbose' => false
       }
@@ -36,34 +38,26 @@ module WWWSave
 
       # Parse command line options.
       parser = OptionParser.new do |opts|
-        opts.banner = "Usage: #{$0.split('/').last} [options] url"
+        opts.banner = "Usage: #{cmd} [options] url"
 
         opts.separator ''
-        opts.separator 'Use the "-s" option with any of these authentication schemes:'
-        known_auth_schemes.sort.each do |id|
-          opts.separator "    #{id}"
-        end
-
+        opts.separator 'Specific options:'
         opts.separator ''
-        opts.separator 'Options:'
 
         opts.on('-h', '--help', 'Show this message') do
           puts opts
           exit   # TODO: can control be passed back to main program?
         end
 
-        opts.on('-o', '--outputdir [DIRECTORY]', 'Set directory to save pages to', "  (default: \"./saved-<web site ID>\"") do |o|
+        opts.on('-o', '--outputdir [DIRECTORY]', 'Set directory to save pages to', "    (default: \"./#{cmd}-<web site ID>\"") do |o|
           options['output_dir'] = o if !o.nil?
         end
 
-        opts.on('-p', '--password [PASSWORD]',
-                'Set password',
-                '  (to be prompted while keeping your',
-                '   password concealed, leave unspecified)') do |p|
+        opts.on('-p', '--password [PASSWORD]', 'Set password') do |p|
           options['password'] = p if !p.nil?
         end
 
-        opts.on('-s', '--scheme [AUTH_SCHEME]', 'Enable Web site authentication') do |s|
+        opts.on('-s', '--scheme [AUTH_SCHEME]', 'Enable Web site authentication (see below)') do |s|
           options['auth_scheme'] = s if !s.nil?
         end
 
@@ -71,13 +65,38 @@ module WWWSave
           options['username'] = u if !u.nil?
         end
 
-        opts.on('-v', '--[no-]verbose', 'Run verbosely', "  (default: #{options['verbose']})") do |v|
+        opts.on('-v', '--[no-]verbose', 'Run verbosely', "    (default: #{options['verbose']})") do |v|
           options['verbose'] = v
         end
 
         opts.on('--version', 'Show version') do
           puts WWWSave::Version::VERSION
           exit   # TODO: can control be passed back to main program?
+        end
+
+        opts.separator <<EOS
+
+
+Simple example:
+
+    $ ./wwwsave http://www.somesite.com
+    $ ./wwwsave http://www.somesite.com/some/page.html
+
+With authenticated access (prompts for password so it's not exposed):
+
+    $ ./wwwsave -s somesite -u thatsme http://somesite.com/users/thatsme
+
+With fully automated authenticated access (exposes paintext password):
+
+    $ ./wwwsave -s somesite -u thatsme -p $3cre3t http://thatsme.somesite.com
+
+
+EOS
+
+        opts.separator 'The following authentication schemes are supported (use with the "-s" option):'
+        opts.separator ''
+        known_auth_schemes.sort.each do |id|
+          opts.separator "    #{id}"
         end
       end
       parser.parse! argv
@@ -102,7 +121,7 @@ module WWWSave
       # Now the output dir can be set if it wasn't passed as an option.
       if !options.has_key? 'output_dir'
         # Extract site identifier from URL if no site ID was passed in.
-        options['output_dir'] = "saved-#{options['auth_scheme'] || uri.host}"
+        options['output_dir'] = "#{cmd}-#{options['auth_scheme'] || uri.host}"
       end
 
       if options.has_key? 'auth_scheme'

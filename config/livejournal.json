@@ -1,13 +1,11 @@
 {
   "login_page": "https://www.livejournal.com/login.bml",
+
   "login_form_selector": ".s-body .lj_login_form",
   "login_form_username_field_name": "user",
   "login_form_password_field_name": "password",
   "login_form_submit_button_selector": "button[name='action:login']",
-  "login_error_text_selector": ".b-bubble-warning ul li",
 
-  "pages_to_save": [
-    "/",
-    "/profile?mode=full"
-  ]
+  "login_success_element_selector": ".b-bubble-warning ul li",
+  "login_error_text_selector": ".b-bubble-warning ul li",
 }

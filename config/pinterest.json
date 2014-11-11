@@ -1,12 +1,11 @@
 {
   "login_page": "https://www.pinterest.com/login/",
+
   "login_form_selector": "form",
   "login_form_username_field_name": "username_or_email",
   "login_form_password_field_name": "password",
   "login_form_submit_button_selector": "button[type='submit']",
-  "login_error_text_selector": ".loginError p",
 
-  "pages_to_save": [
-    "/"
-  ]
+  "login_success_element_selector": ".b-bubble-warning ul li",
+  "login_error_text_selector": ".loginError p",
 }

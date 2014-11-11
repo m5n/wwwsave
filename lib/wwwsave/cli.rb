@@ -1,3 +1,5 @@
+require 'net/http'   # for SocketError
+
 require 'wwwsave/errors'
 require 'wwwsave/options'
 require 'wwwsave/scraper'

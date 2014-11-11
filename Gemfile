@@ -1,9 +1,13 @@
-source "https://rubygems.org"
+source 'https://rubygems.org'
 
-# Mechanize is a ruby library that makes automated web interaction easy.
-# http://docs.seattlerb.org/mechanize
-gem "mechanize"
+# The original goal was to use Mechanize, but since certain popular sites like
+# Pinterest rely on JavaScript for authentication and Mechanize cannot execute
+# JavaScript, Watir is used for browser automation.
+# https://github.com/watir/watir/
+gem 'watir'
 
-# Some popular sites rely on JavaScript for authentication, e.g. Pinterest.
-# Mechanize has no capability of executing JavaScript, so use another tool.
-gem "watir"
+# TODO: use http://watirwebdriver.com/headless/ ?
+
+# Now that Mechanize is not used, get some help with parsing HTML documents.
+# https://github.com/sparklemotion/nokogiri
+gem 'nokogiri'
