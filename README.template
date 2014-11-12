@@ -28,7 +28,7 @@ Determine the Ruby installed by running the following and grabbing the ruby list
 
 Now configure a compartmentalized independent Ruby setup for this project (replace ruby-2.1.1 with whatever version of Ruby got installed earlier):
 
-    $ rvm --ruby-version use ruby-2.1.1@wwwsave
+    $ rvm --create --ruby-version use ruby-2.1.1@wwwsave
 
 Install the gems this project relies on:
 

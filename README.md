@@ -31,7 +31,7 @@ With authenticated access (prompts for password so it's not exposed):
 
 With fully automated authenticated access (exposes paintext password):
 
-    $ ./wwwsave -s somesite -u thatsme -p $3cre3t http://thatsme.somesite.com
+    $ ./wwwsave -s somesite -u thatsme -p '$3cre3t' http://thatsme.somesite.com
 
 
 The following authentication schemes are supported (use with the "-s" option):
@@ -61,7 +61,7 @@ Determine the Ruby installed by running the following and grabbing the ruby list
 
 Now configure a compartmentalized independent Ruby setup for this project (replace ruby-2.1.1 with whatever version of Ruby got installed earlier):
 
-    $ rvm --ruby-version use ruby-2.1.1@wwwsave
+    $ rvm --create --ruby-version use ruby-2.1.1@wwwsave
 
 Install the gems this project relies on:
 

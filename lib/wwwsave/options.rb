@@ -88,7 +88,7 @@ With authenticated access (prompts for password so it's not exposed):
 
 With fully automated authenticated access (exposes paintext password):
 
-    $ ./wwwsave -s somesite -u thatsme -p $3cre3t http://thatsme.somesite.com
+    $ ./wwwsave -s somesite -u thatsme -p '$3cre3t' http://thatsme.somesite.com
 
 
 EOS
