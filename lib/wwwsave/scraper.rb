@@ -79,29 +79,13 @@ module WWWSave
         begin
           url = item['src'] || item['href']
           ref_uri = page_uri.merge url
-          save_as = new_ref = local_path ref_uri
-          save_as = "#{@options.output_dir}#{save_as}"
-          save_as += 'index.html' if save_as[-1] == '/'
-          new_ref = ".#{new_ref}"
-          new_ref += 'index.html' if new_ref[-1] == '/'
 
           log ''
           log 'Process_content:'
           log "Ref: #{url}"
           log "URI: #{ref_uri}"
 
-          if File.exists? save_as
-            log "Already saved: #{save_as}"
-          else
-            log "Save as: #{save_as}"
-
-            # Save page resources "as is".
-            FileUtils.mkpath File.dirname(save_as) if !Dir.exists? File.dirname(save_as)
-            File.open(save_as, 'wb') do |f|
-              f.write open(ref_uri).read
-              # TODO: process CSS, e.g. background:url(/assets/...)
-            end
-          end
+          new_ref = save_resource ref_uri
 
           # Change reference to resource in page.
           item['src'] ? item['src'] = new_ref : item['href'] = new_ref
@@ -111,6 +95,61 @@ module WWWSave
           puts error.backtrace if @options.verbose
         end
       end
+    end
+
+    def save_resource(ref_uri)
+      save_as = new_ref = local_path ref_uri
+      save_as = "#{@options.output_dir}#{save_as}"
+      save_as += 'index.html' if save_as[-1] == '/'
+
+      new_ref = ".#{new_ref}"
+      new_ref += 'index.html' if new_ref[-1] == '/'
+
+      if File.exists? save_as
+        log "Already saved: #{save_as}"
+      else
+        log "Save as: #{save_as}"
+
+        # Save page resources "as is".
+        dirname = File.dirname save_as
+        FileUtils.mkpath dirname if !Dir.exists? dirname
+        File.open(save_as, 'wb') do |f|
+          content = open(ref_uri).read
+
+          # TODO: any other extensions? Check something else instead?
+          if ref_uri.path.end_with? ".css"
+            level = ref_uri.path.split('/').length - 1
+            content = process_css(content, ref_uri, level)
+          end
+
+          f.write content
+        end
+      end
+
+      new_ref
+    end
+
+    def process_css(content, ref_uri, level)
+      matches = content.scan(/url\s*\(['"]?(.+?)['"]?\)/i)
+      matches.map! { |m| m = m[0] }
+      matches.uniq.each do |m|
+        uri = ref_uri.merge m
+        new_ref = save_resource uri
+
+        first = true
+        level.times do
+          if first
+            new_ref = '.' + new_ref
+            first = false
+          else
+            new_ref = '../' + new_ref
+          end
+        end
+
+        content.gsub!(m, new_ref)
+      end
+
+      content
     end
 
     def capture_start
@@ -187,11 +226,9 @@ module WWWSave
       clone.scheme = @uri.scheme   # Avoid port mismatch due to scheme.
 
       if "#{clone.host}:#{clone.port}" == "#{@uri.host}:#{@uri.port}"
-p "1"
         clone.scheme = clone.host = clone.port = nil
         clone.to_s.empty? ? '/' : clone.to_s
       else
-p "2"
         clone.scheme = nil
         clone.to_s[1..-1]   # Avoid path starting with "//".
       end
