@@ -75,7 +75,11 @@ module WWWSave
     end
 
     def process_content(page_uri, page)
-      page.search('link[href], img[src], script[src]').each do |item|
+      page.search('[style]').each do |item|
+        item['style'] = process_css(item['style'], page_uri, 0)
+      end
+
+      page.search('link[href], img[src], script[src], iframe[src]').each do |item|
         begin
           url = item['src'] || item['href']
           ref_uri = page_uri.merge url
@@ -133,20 +137,26 @@ module WWWSave
       matches = content.scan(/url\s*\(['"]?(.+?)['"]?\)/i)
       matches.map! { |m| m = m[0] }
       matches.uniq.each do |m|
-        uri = ref_uri.merge m
-        new_ref = save_resource uri
+        begin
+          uri = ref_uri.merge m
+          new_ref = save_resource uri
 
-        first = true
-        level.times do
-          if first
-            new_ref = '.' + new_ref
-            first = false
-          else
-            new_ref = '../' + new_ref
+          first = true
+          level.times do
+            if first
+              new_ref = '.' + new_ref
+              first = false
+            else
+              new_ref = '../' + new_ref
+            end
           end
-        end
 
-        content.gsub!(m, new_ref)
+          content.gsub!(m, new_ref)
+        rescue Exception => error   # TODO: something more specific?
+          puts "An error occured. Skipping #{uri}"
+          puts error.message if @options.verbose
+          puts error.backtrace if @options.verbose
+        end
       end
 
       content
