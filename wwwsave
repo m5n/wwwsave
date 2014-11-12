@@ -1,3 +1,4 @@
-#!/bin/sh
+#!/usr/bin/ruby
 
-RUBYLIB=lib bin/wwwsave $@
+ENV['RUBYLIB'] = 'lib'
+system "bin/wwwsave '#{ARGV.join "' '"}'"
