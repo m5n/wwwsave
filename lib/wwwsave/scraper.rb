@@ -109,7 +109,7 @@ module WWWSave
       new_ref = ".#{new_ref}"
       new_ref += 'index.html' if new_ref[-1] == '/'
 
-      if File.exists? save_as
+      if File.exists? save_as   # TODO: use in-memory cache?
         log "Already saved: #{save_as}"
       else
         log "Save as: #{save_as}"
@@ -168,11 +168,11 @@ module WWWSave
       puts "Going to save content to \"#{File.join '.', @options.output_dir}\""
     end
 
-    def capture_finish
+    def capture_finish(show_done=true)
       end_time = Time.now
       elapsed = end_time.to_i - @start_time.to_i
       log "End: #{end_time}. Elapsed: #{elapsed / 60}m#{elapsed - (elapsed / 60) * 60}s"
-      puts 'Done!'
+      puts 'Done!' if show_done
     end
 
     def login
@@ -188,13 +188,16 @@ module WWWSave
         form.text_field(:name => @options.login_form_password_field_name).when_present.set @options.password
         form.element(:css => @options.login_form_submit_button_selector).when_present.click
 
-        Watir::Wait.until { @browser.elements(:css => @options.login_error_text_selector).length > 0 || @browser.url != current_url }
+        Watir::Wait.until { @browser.elements(:css => @options.login_error_text_selector).length > 0 || @browser.elements(:css => @options.login_success_element_selector).length > 0 }
 
-        # TODO: not all sites redirect after successful login, e.g. LJ.
-        if @browser.url == current_url
+        err_elts = @browser.elements(:css => @options.login_error_text_selector)
+        if err_elts.length > 0
+          err_text = err_elts[0].text
+
           log 'Login error'
-          errorText = @browser.element(:css => @options.login_error_text_selector).text
-          abort errorText
+          @browser.close
+          capture_finish false
+          abort err_text
         end
       rescue Watir::Wait::TimeoutError => error
         raise LoginError.new(error), 'Unable to log in'
