@@ -12,7 +12,6 @@ module WWWSave
     def initialize(options)
       @cmd = $0.split('/').last
       @options = options
-      @uri = URI.parse @options.url
       @seen_first_page = false
 
       log "Options: #{@options}"
@@ -24,6 +23,15 @@ module WWWSave
 
       # Do login before creating directories as an error could still occur.
       login if @options.login_required
+
+      if @options.has_url?
+        # Save single page only.
+        @uri = URI.parse @options.url
+      else
+        # Save home page and other user content.
+        @browser.element(:css => @options.home_button_selector).when_present.click
+        @uri = URI.parse @browser.url
+      end
 
       init_output_dir
       save_page @uri
@@ -228,7 +236,7 @@ module WWWSave
       File.open "#{@options.output_dir}/README", 'w' do |f|
         f.puts "Thank you for using #{@cmd} - https://github.com/m5n/#{@cmd}"
         f.puts
-        f.puts "Site: #{@options.url}"
+        f.puts "Site: #{@options.has_url? ? @options.url : @uri}"
         f.puts "User: #{@options.username}" if @options.login_required
         f.puts "Date: #{Time.now}"
       end

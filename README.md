@@ -5,36 +5,42 @@ STILL A WORK IN PROGRESS
 
 Usage
 -----
-Usage: wwwsave [options] url
+Usage: wwwsave [options]
 
 Specific options:
 
     -h, --help                       Show this message
-    -o, --outputdir [DIRECTORY]      Set directory to save pages to
+    -o, --outputdir [DIRECTORY]      Directory to save pages to
                                          (default: "./wwwsave-<web site ID>"
-    -p, --password [PASSWORD]        Set password
-    -s, --scheme [AUTH_SCHEME]       Enable Web site authentication (see below)
-    -u, --username [USERNAME]        Set username
+    -p, --password [PASSWORD]        Password for authentication
+    -s, --site [SITE_ID]             Enable login & personal content discovery
+                                         (supported site IDs are listed below)
+    -u, --username [USERNAME]        Username for authentication
     -v, --[no-]verbose               Run verbosely
                                          (default: false)
+        --url [URL]                  Page to save (no other page will be saved)
         --version                    Show version
 
 
-Simple example:
+To save a single public page:
 
-    $ ./wwwsave http://www.somesite.com
-    $ ./wwwsave http://www.somesite.com/some/page.html
+    $ ./wwwsave --url http://www.example.com
+    $ ./wwwsave --url http://www.example.com/path/to/page.html
 
-With authenticated access (prompts for password so it's not exposed):
+To save all personal content on a site requiring login (prompts for password):
 
-    $ ./wwwsave -s somesite -u thatsme http://somesite.com/users/thatsme
+    $ ./wwwsave -s site -u myname
 
-With fully automated authenticated access (exposes paintext password):
+To automate login (exposes plaintext password):
 
-    $ ./wwwsave -s somesite -u thatsme -p '$3cre3t' http://thatsme.somesite.com
+    $ ./wwwsave -s site -u myname -p '$3cr3t'
+
+To save a single page on a site requiring login:
+
+    $ ./wwwsave -s site -u myname -p '$3cr3t' --url http://myname.example.com
 
 
-The following authentication schemes are supported (use with the "-s" option):
+The following IDs are supported for sites requiring login (use with the "-s" option):
 
     livejournal
     pinterest

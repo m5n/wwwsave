@@ -9,9 +9,8 @@ module WWWSave
     def initialize(argv)
       @options = parse argv
 
-      # Auth scheme was used to read properties file, so remove from options.
-      # Replace it with a "login required" indicator.
-      @options['login_required'] = !@options.delete('auth_scheme').nil?
+      # Replace site config param with a "login required" indicator.
+      @options['login_required'] = !@options.delete('site').nil?
 
       if @options['login_required']
         # Username is required if an authentication scheme is in effect.
@@ -30,15 +29,15 @@ module WWWSave
       }
 
       # Gather supported sites for authenticated access.
-      known_auth_schemes = []
+      known_sites = []
       Dir.glob('config/*') do |file|
         id = file.split(/\/|\./)[1]
-        known_auth_schemes.push id
+        known_sites.push id
       end
 
       # Parse command line options.
       parser = OptionParser.new do |opts|
-        opts.banner = "Usage: #{cmd} [options] url"
+        opts.banner = "Usage: #{cmd} [options]"
 
         opts.separator ''
         opts.separator 'Specific options:'
@@ -49,24 +48,28 @@ module WWWSave
           exit   # TODO: can control be passed back to main program?
         end
 
-        opts.on('-o', '--outputdir [DIRECTORY]', 'Set directory to save pages to', "    (default: \"./#{cmd}-<web site ID>\"") do |o|
+        opts.on('-o', '--outputdir [DIRECTORY]', 'Directory to save pages to', "    (default: \"./#{cmd}-<web site ID>\"") do |o|
           options['output_dir'] = o if !o.nil?
         end
 
-        opts.on('-p', '--password [PASSWORD]', 'Set password') do |p|
+        opts.on('-p', '--password [PASSWORD]', 'Password for authentication') do |p|
           options['password'] = p if !p.nil?
         end
 
-        opts.on('-s', '--scheme [AUTH_SCHEME]', 'Enable Web site authentication (see below)') do |s|
-          options['auth_scheme'] = s if !s.nil?
+        opts.on('-s', '--site [SITE_ID]', 'Enable login & personal content discovery', '    (supported site IDs are listed below)') do |s|
+          options['site'] = s if !s.nil?
         end
 
-        opts.on('-u', '--username [USERNAME]', 'Set username') do |u|
+        opts.on('-u', '--username [USERNAME]', 'Username for authentication') do |u|
           options['username'] = u if !u.nil?
         end
 
         opts.on('-v', '--[no-]verbose', 'Run verbosely', "    (default: #{options['verbose']})") do |v|
           options['verbose'] = v
+        end
+
+        opts.on('--url [URL]', 'Page to save (no other page will be saved)') do |url|
+          options['url'] = url if !url.nil?
         end
 
         opts.on('--version', 'Show version') do
@@ -77,56 +80,61 @@ module WWWSave
         opts.separator <<EOS
 
 
-Simple example:
+To save a single public page:
 
-    $ ./wwwsave http://www.somesite.com
-    $ ./wwwsave http://www.somesite.com/some/page.html
+    $ ./wwwsave --url http://www.example.com
+    $ ./wwwsave --url http://www.example.com/path/to/page.html
 
-With authenticated access (prompts for password so it's not exposed):
+To save all personal content on a site requiring login (prompts for password):
 
-    $ ./wwwsave -s somesite -u thatsme http://somesite.com/users/thatsme
+    $ ./wwwsave -s site -u myname
 
-With fully automated authenticated access (exposes paintext password):
+To automate login (exposes plaintext password):
 
-    $ ./wwwsave -s somesite -u thatsme -p '$3cre3t' http://thatsme.somesite.com
+    $ ./wwwsave -s site -u myname -p '$3cr3t'
+
+To save a single page on a site requiring login:
+
+    $ ./wwwsave -s site -u myname -p '$3cr3t' --url http://myname.example.com
 
 
 EOS
 
-        opts.separator 'The following authentication schemes are supported (use with the "-s" option):'
+        opts.separator 'The following IDs are supported for sites requiring login (use with the "-s" option):'
         opts.separator ''
-        known_auth_schemes.sort.each do |id|
+        known_sites.sort.each do |id|
           opts.separator "    #{id}"
         end
       end
       parser.parse! argv
 
       # Parse leftover command line arguments.
-      raise ArgumentError, 'Incorrect number of arguments. Use -h for usage.' if argv.length != 1
-      options['url'] = argv.shift
+      raise ArgumentError, 'Invalid or missing option(s). Use -h for usage.' if argv.length != 0
 
       # Validate authentication scheme.
-      raise ArgumentError, 'Unknown authentication scheme. Use -h for usage.' if options.has_key?('auth_scheme') && !known_auth_schemes.include?(options['auth_scheme'])
+      raise ArgumentError, 'Unknown authentication scheme. Use -h for usage.' if options.has_key?('site') && !known_sites.include?(options['site'])
 
-      # Validate URL.
-      begin
-        uri = URI.parse(options['url'])
-        raise URI::InvalidURIError if !uri.kind_of?(URI::HTTP)
-      rescue URI::InvalidURIError => error
-        puts error.message if options['verbose']
-        puts error.backtrace if options['verbose']
-        raise ArgumentError, 'Invalid URL.'
+      if options.has_key? 'url'
+        # Validate URL.
+        begin
+          uri = URI.parse(options['url'])
+          raise URI::InvalidURIError if !uri.kind_of?(URI::HTTP)
+        rescue URI::InvalidURIError => error
+          puts error.message if options['verbose']
+          puts error.backtrace if options['verbose']
+          raise ArgumentError, 'Invalid URL.'
+        end
       end
 
       # Now the output dir can be set if it wasn't passed as an option.
       if !options.has_key? 'output_dir'
         # Extract site identifier from URL if no site ID was passed in.
-        options['output_dir'] = "#{cmd}-#{options['auth_scheme'] || uri.host}"
+        options['output_dir'] = "#{cmd}-#{options['site'] || uri.host}"
       end
 
-      if options.has_key? 'auth_scheme'
+      if options.has_key? 'site'
         # Augment with web site specific properties.
-        site_options = JSON.load IO.read "config/#{options['auth_scheme']}.json"
+        site_options = JSON.load IO.read "config/#{options['site']}.json"
         site_options.each do |k, v|
           options[k] = v if !options.has_key? k
         end
@@ -150,7 +158,9 @@ EOS
     # Give read-only access to options.
     def method_missing(method, *args, &block)
       key = method.to_s
-      if @options.has_key?(key)
+      if key[/has_(.+)\?/]
+        @options.has_key? $1
+      elsif @options.has_key? key
         @options[key]
       else
         raise NoMethodError, "undefined method `#{method.to_s}' for #{inspect}"

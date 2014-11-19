@@ -7,5 +7,7 @@
   "login_form_submit_button_selector": "button[type='submit']",
 
   "login_success_element_selector": ".RightHeader",
-  "login_error_text_selector": ".loginError p"
+  "login_error_text_selector": ".loginError p",
+
+  "home_button_selector": ".UserNavigateButton"
 }
