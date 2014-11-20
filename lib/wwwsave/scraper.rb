@@ -83,8 +83,10 @@ module WWWSave
     end
 
     def process_content(page_uri, page)
+      save_as_level = page_uri.path.split('/').length - 1
+
       page.search('[style]').each do |item|
-        item['style'] = process_css(item['style'], page_uri, 0)
+        item['style'] = process_css item['style'], page_uri, save_as_level
       end
 
       page.search('link[href], img[src], script[src], iframe[src]').each do |item|
@@ -97,7 +99,8 @@ module WWWSave
           log "Ref: #{url}"
           log "URI: #{ref_uri}"
 
-          new_ref = save_resource ref_uri
+          new_ref = save_resource ref_uri, save_as_level
+          new_ref = level_prefix(save_as_level) + new_ref
 
           # Change reference to resource in page.
           item['src'] ? item['src'] = new_ref : item['href'] = new_ref
@@ -109,7 +112,7 @@ module WWWSave
       end
     end
 
-    def save_resource(ref_uri)
+    def save_resource(ref_uri, save_as_level=0)
       save_as = new_ref = local_path ref_uri
       save_as = "#{@options.output_dir}#{save_as}"
       save_as += 'index.html' if save_as[-1] == '/'
@@ -130,8 +133,8 @@ module WWWSave
 
           # TODO: any other extensions? Check something else instead?
           if ref_uri.path.end_with? ".css"
-            level = ref_uri.path.split('/').length - 1
-            content = process_css(content, ref_uri, level)
+            ref_level = ref_uri.path.split('/').length - 1
+            content = process_css content, ref_uri, save_as_level, ref_level
           end
 
           f.write content
@@ -141,25 +144,19 @@ module WWWSave
       new_ref
     end
 
-    def process_css(content, ref_uri, level)
-      matches = content.scan(/url\s*\(['"]?(.+?)['"]?\)/i)
+    def process_css(content, ref_uri, save_as_level=0, ref_level=0)
+      matches = content.scan /url\s*\(['"]?(.+?)['"]?\)/i
       matches.map! { |m| m = m[0] }
       matches.uniq.each do |m|
+        next if !m[/^[h\/]/i]   # Skip relative URLs or data-uris.
+
         begin
           uri = ref_uri.merge m
-          new_ref = save_resource uri
 
-          first = true
-          level.times do
-            if first
-              new_ref = '.' + new_ref
-              first = false
-            else
-              new_ref = '../' + new_ref
-            end
-          end
+          new_ref = save_resource uri, save_as_level
+          new_ref = level_prefix(ref_level) + new_ref
 
-          content.gsub!(m, new_ref)
+          content.gsub! m, new_ref
         rescue Exception => error   # TODO: something more specific?
           puts "An error occured. Skipping #{uri}"
           puts error.message if @options.verbose
@@ -190,7 +187,7 @@ module WWWSave
         @browser.goto @options.login_page
         current_url = @browser.url
 
-        form = @browser.element(:css => @options.login_form_selector)
+        form = @browser.element :css => @options.login_form_selector
 
         form.text_field(:name => @options.login_form_username_field_name).when_present.set @options.username
         form.text_field(:name => @options.login_form_password_field_name).when_present.set @options.password
@@ -198,7 +195,7 @@ module WWWSave
 
         Watir::Wait.until { @browser.elements(:css => @options.login_error_text_selector).length > 0 || @browser.elements(:css => @options.login_success_element_selector).length > 0 }
 
-        err_elts = @browser.elements(:css => @options.login_error_text_selector)
+        err_elts = @browser.elements :css => @options.login_error_text_selector
         if err_elts.length > 0
           err_text = err_elts[0].text
 
@@ -226,7 +223,7 @@ module WWWSave
       if Dir.exists? @options.output_dir
         ts = Time.now.to_i
         puts "Renaming existing directory to \"#{File.join '.', @options.output_dir}.#{ts}\""
-        File.rename(@options.output_dir, "#{@options.output_dir}.#{ts}")
+        File.rename @options.output_dir, "#{@options.output_dir}.#{ts}"
       end
 
       # Create output directory.
@@ -240,6 +237,22 @@ module WWWSave
         f.puts "User: #{@options.username}" if @options.login_required
         f.puts "Date: #{Time.now}"
       end
+    end
+
+    def level_prefix(level)
+      result = ''
+
+      first = true
+      level.times do
+        if first
+          result = '.' + result
+          first = false
+        else
+          result = '../' + result
+        end
+      end
+
+      result
     end
 
     def local_path(uri)
