@@ -12,6 +12,7 @@ module WWWSave
     def initialize(options)
       @cmd = $0.split('/').last
       @options = options
+      @username = @options.username
       @seen_first_page = false
 
       log "Options: #{@options}"
@@ -28,13 +29,24 @@ module WWWSave
         # Save single page only.
         @uri = URI.parse @options.url
       else
-        # Save home page and other user content.
-        @browser.element(:css => @options.home_button_selector).when_present.click
-        @uri = URI.parse @browser.url
+        if @options.has_actual_username_regex?
+          # Capture user ID (in case login username != logged-in username).
+          @browser.html[/#{@options.actual_username_regex}/]
+          @username = $1
+        end
+        log "Username: #{@username}"
+
+        home_page_path = @options.home_page_path.sub '{{username}}', @username
+        log "Home path: #{home_page_path}"
+        home_uri = URI.parse(@browser.url).merge(home_page_path)
+        log "Home page: #{home_uri}"
+
+        @uri = home_uri
       end
 
       init_output_dir
       save_page @uri
+      # TODO: if @uri is in a subdir, need to create a copy as /index.html
 
       logout if @options.login_required
 
@@ -47,9 +59,10 @@ module WWWSave
       path = "#{@options.output_dir}#{path}"
       path += 'index.html' if path[-1] == '/'
 
-      log 'Save_page:'
-      log "Page: #{uri}"
-      log "As: #{path}"
+      log '='*78
+      log "Save page: #{uri}"
+      log "       As: #{path}"
+      log '='*78
 
       begin
         first_time = !@seen_first_page
@@ -58,18 +71,25 @@ module WWWSave
         process_content uri, page
 
         FileUtils.mkpath File.dirname(path) if !Dir.exists? File.dirname(path)
-        log "Saving: #{path}"
         File.open(path, 'w') { |f| page.write_html_to f }
       rescue Exception => error   # TODO: something more specific?
         puts "An error occured. Skipping #{uri}"
         puts error.message if @options.verbose
         puts error.backtrace if @options.verbose
       end
+
+      if @options.login_required && !@options.has_url?
+        # TODO: save other pages
+        @options.paths_to_save_regexes
+#        "paths_to_save_regexes": [
+#          "href=['\"]/{{username}}/.*['\"]"
+#        ]
+      end
     end
 
     def get_page(uri)
       puts "Retrieving: #{uri}"
-      @browser.goto uri.to_s
+      @browser.goto uri.to_s if @browser.url != uri.to_s
 
       if !@seen_first_page
         log "Update site URI from \"#{@uri}\" to \"#{@browser.url}\""
@@ -77,9 +97,12 @@ module WWWSave
         @seen_first_page = true
       end
 
-      Nokogiri::HTML(@browser.html) do |config|
-        config.strict.nonet.noblanks
-      end
+      # TODO: how to avoid entities for in-page script JS code?
+      # TODO: need more control?
+      #Nokogiri::HTML(@browser.html) do |config|
+      #  config.noblanks.noent.strict.nonet
+      #end
+      Nokogiri::HTML @browser.html
     end
 
     def process_content(page_uri, page)
@@ -95,9 +118,8 @@ module WWWSave
           ref_uri = page_uri.merge url
 
           log ''
-          log 'Process_content:'
-          log "Ref: #{url}"
-          log "URI: #{ref_uri}"
+          log "Save content: #{url}"
+          log "         URI: #{ref_uri}"
 
           new_ref = save_resource ref_uri, save_as_level
           new_ref = level_prefix(save_as_level) + new_ref
@@ -121,9 +143,9 @@ module WWWSave
       new_ref += 'index.html' if new_ref[-1] == '/'
 
       if File.exists? save_as   # TODO: use in-memory cache?
-        log "Already saved: #{save_as}"
+        log "        Skip: #{save_as}"
       else
-        log "Save as: #{save_as}"
+        log "          As: #{save_as}"
 
         # Save page resources "as is".
         dirname = File.dirname save_as
@@ -148,10 +170,12 @@ module WWWSave
       matches = content.scan /url\s*\(['"]?(.+?)['"]?\)/i
       matches.map! { |m| m = m[0] }
       matches.uniq.each do |m|
-        next if !m[/^[h\/]/i]   # Skip relative URLs or data-uris.
+        next if !m[/^[h\/]/i]   # Skip relative URLs or data blocks.
 
         begin
           uri = ref_uri.merge m
+          log "Save CSS ref: #{m}"
+          log "         URI: #{uri}"
 
           new_ref = save_resource uri, save_as_level
           new_ref = level_prefix(ref_level) + new_ref
@@ -215,7 +239,7 @@ module WWWSave
     end
 
     def logout
-      # TODO: log out if @options.login_required
+      # TODO: log out
     end
 
     def init_output_dir

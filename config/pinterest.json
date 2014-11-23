@@ -9,5 +9,11 @@
   "login_success_element_selector": ".RightHeader",
   "login_error_text_selector": ".loginError p",
 
-  "home_button_selector": ".UserNavigateButton"
+  "actual_username_regex": "P.start.start\\(.*?\"username\":\\s+\"(.+?)\"",
+
+  "home_page_path": "/{{username}}/",
+
+  "paths_to_save_regexes": [
+    "href=['\"]/{{username}}/.*['\"]"
+  ]
 }
