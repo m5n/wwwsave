@@ -10,6 +10,9 @@ require 'wwwsave/errors'
 
 module WWWSave
   class Scraper
+    # #Seconds to wait before fetching next page.
+    NEXT_PAGE_DELAY = 2
+
     def initialize(options)
       @cmd = $0.split('/').last
       @options = options
@@ -29,6 +32,8 @@ module WWWSave
         # Save single page only.
         @uri = URI.parse @options.url
       else
+        @more_pages = []
+
         @username = @options.username
         if @options.has_actual_username_regex?
           # Capture user ID (in case login username != logged-in username).
@@ -61,9 +66,7 @@ module WWWSave
     end
 
     def save_page(uri)
-      path = local_path uri
-      path = "#{@options.output_dir}#{path}"
-      path += 'index.html' if path[-1] == '/'
+      path = local_path uri, @options.output_dir
 
       log '='*75
       log "Save page: #{uri}"
@@ -76,9 +79,38 @@ module WWWSave
         uri = @uri if first_time
         process_content uri, page
 
-        # Avoid HTML entities being written out in <script> content.
+        # Change links to local copies and find more pages to save.
+        if @options.login_required && !@options.has_url?
+          page.search('a[href]').each do |item|
+            @options.paths_to_save_regexes.each do |regex|
+              if item['href'][/#{regex}/]
+                orig_href = item['href']
+                orig_uri = uri.merge orig_href
+                save_as = local_path orig_uri, @options.output_dir
+
+                # TODO: hack alert: length + 1 and [0..-2]... another way?
+                save_as_level = uri.path.split('/').length + 1
+                item['href'] = level_prefix(save_as_level)[0..-2] + save_as
+
+                if !File.exists?(save_as) && !@more_pages.include?(orig_uri)
+                  log "Adding page: #{orig_href}"
+                  log "        URI: #{orig_uri}"
+                  log "         As: #{save_as}"
+                  log "       HTML: #{item['href']}"
+
+                  @more_pages.push orig_uri
+                end
+              end
+            end
+          end
+        end
+
+        # Avoid HTML entities in certain tags.
+        # TODO: how to configure Nokogiri so this is not needed?
+        #       (config.noent does not accomplish this)
+        tags = [ 'noscript', 'script', 'style' ]
         page.traverse do |node|
-          if node.name == 'script'
+          if tags.include? node.name
             node.content = CGI.unescapeHTML node.content
           end
         end
@@ -91,14 +123,15 @@ module WWWSave
         puts error.backtrace if @options.verbose
       end
 
+      # Save the next page, if any.
       if @options.login_required && !@options.has_url?
-        # TODO: save other pages
-        page.search('a[href]').each do |item|
-          @options.paths_to_save_regexes.each do |regex|
-            if item['href'][/#{regex}/]
-              log "Also save page: #{item['href']}"
-            end
-          end
+        log "#Pages left: #{@more_pages.length}"
+        next_uri = @more_pages.shift
+        if next_uri
+          # Avoid rate limiting.
+          sleep NEXT_PAGE_DELAY
+
+          save_page next_uri
         end
       end
     end
@@ -130,14 +163,16 @@ module WWWSave
       page.search('link[href], img[src], script[src], iframe[src]').each do |item|
         begin
           url = item['src'] || item['href']
+          url = CGI.unescapeHTML url   # Undo Nokogiri's HTML entitification.
+                                       # TODO: how to configure Nokogiri?
           ref_uri = page_uri.merge url
 
-          log ''
           log "Save content: #{url}"
           log "         URI: #{ref_uri}"
 
           new_ref = save_resource ref_uri, save_as_level
           new_ref = level_prefix(save_as_level) + new_ref
+          log "        HTML: #{new_ref}"
 
           # Change reference to resource in page.
           item['src'] ? item['src'] = new_ref : item['href'] = new_ref
@@ -150,12 +185,8 @@ module WWWSave
     end
 
     def save_resource(ref_uri, save_as_level=0)
-      save_as = new_ref = local_path ref_uri
-      save_as = "#{@options.output_dir}#{save_as}"
-      save_as += 'index.html' if save_as[-1] == '/'
-
-      new_ref = ".#{new_ref}"
-      new_ref += 'index.html' if new_ref[-1] == '/'
+      save_as = local_path ref_uri, @options.output_dir
+      new_ref = local_path ref_uri, '.'
 
       if File.exists? save_as   # TODO: use in-memory cache?
         log "        Skip: #{save_as}"
@@ -194,6 +225,7 @@ module WWWSave
 
           new_ref = save_resource uri, save_as_level
           new_ref = level_prefix(ref_level) + new_ref
+          log "        HTML: #{uri}"
 
           content.gsub! m, new_ref
         rescue Exception => error   # TODO: something more specific?
@@ -294,17 +326,20 @@ module WWWSave
       result
     end
 
-    def local_path(uri)
+    def local_path(uri, prefix)
       clone = URI.parse uri.to_s
       clone.scheme = @uri.scheme   # Avoid port mismatch due to scheme.
 
       if "#{clone.host}:#{clone.port}" == "#{@uri.host}:#{@uri.port}"
         clone.scheme = clone.host = clone.port = nil
-        clone.to_s.empty? ? '/' : clone.to_s
+        path = clone.to_s.empty? ? '/' : clone.to_s
       else
         clone.scheme = nil
-        clone.to_s[1..-1]   # Avoid path starting with "//".
+        path = clone.to_s[1..-1]   # Avoid path starting with "//".
       end
+
+      path = "#{prefix}#{path}"
+      path += 'index.html' if path[-1] == '/'
     end
 
     def log(str)
