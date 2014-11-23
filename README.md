@@ -7,18 +7,19 @@ Usage
 -----
 Usage: wwwsave [options]
 
-Specific options:
+Options:
 
     -h, --help                       Show this message
     -o, --outputdir [DIRECTORY]      Directory to save pages to
                                          (default: "./wwwsave-<web site ID>"
-    -p, --password [PASSWORD]        Password for authentication
+    -p, --password [PASSWORD]        Password for login
     -s, --site [SITE_ID]             Enable login & personal content discovery
                                          (supported site IDs are listed below)
-    -u, --username [USERNAME]        Username for authentication
+    -u, --username [USERNAME]        Username for login
     -v, --[no-]verbose               Run verbosely
                                          (default: false)
-        --url [URL]                  Page to save (no other page will be saved)
+        --url [URL]                  Page to save
+                                         (no other page will be saved)
         --version                    Show version
 
 
@@ -40,7 +41,7 @@ To save a single page on a site requiring login:
     $ ./wwwsave -s site -u myname -p '$3cr3t' --url http://myname.example.com
 
 
-The following IDs are supported for sites requiring login (use with the "-s" option):
+The following IDs are supported for sites requiring login:
 
     livejournal
     pinterest

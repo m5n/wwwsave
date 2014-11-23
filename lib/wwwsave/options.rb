@@ -40,7 +40,7 @@ module WWWSave
         opts.banner = "Usage: #{cmd} [options]"
 
         opts.separator ''
-        opts.separator 'Specific options:'
+        opts.separator 'Options:'
         opts.separator ''
 
         opts.on('-h', '--help', 'Show this message') do
@@ -52,7 +52,7 @@ module WWWSave
           options['output_dir'] = o if !o.nil?
         end
 
-        opts.on('-p', '--password [PASSWORD]', 'Password for authentication') do |p|
+        opts.on('-p', '--password [PASSWORD]', 'Password for login') do |p|
           options['password'] = p if !p.nil?
         end
 
@@ -60,7 +60,7 @@ module WWWSave
           options['site'] = s if !s.nil?
         end
 
-        opts.on('-u', '--username [USERNAME]', 'Username for authentication') do |u|
+        opts.on('-u', '--username [USERNAME]', 'Username for login') do |u|
           options['username'] = u if !u.nil?
         end
 
@@ -68,7 +68,7 @@ module WWWSave
           options['verbose'] = v
         end
 
-        opts.on('--url [URL]', 'Page to save (no other page will be saved)') do |url|
+        opts.on('--url [URL]', 'Page to save', '    (no other page will be saved)') do |url|
           options['url'] = url if !url.nil?
         end
 
@@ -100,7 +100,7 @@ To save a single page on a site requiring login:
 
 EOS
 
-        opts.separator 'The following IDs are supported for sites requiring login (use with the "-s" option):'
+        opts.separator 'The following IDs are supported for sites requiring login:'
         opts.separator ''
         known_sites.sort.each do |id|
           opts.separator "    #{id}"
@@ -163,7 +163,7 @@ EOS
       elsif @options.has_key? key
         @options[key]
       else
-        raise NoMethodError, "undefined method `#{method.to_s}' for #{inspect}"
+        raise NoMethodError, "undefined method `#{method.to_s}' for #{to_s}"
       end
     end
 
