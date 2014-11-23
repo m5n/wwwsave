@@ -1,3 +1,4 @@
+require 'cgi'         # for unescaping HTML entities
 require 'fileutils'   # for creating an entire dir path in one go
 require 'json'        # for parsing JSON strings
 require 'nokogiri'    # for parsing HTML documents
@@ -12,7 +13,6 @@ module WWWSave
     def initialize(options)
       @cmd = $0.split('/').last
       @options = options
-      @username = @options.username
       @seen_first_page = false
 
       log "Options: #{@options}"
@@ -29,6 +29,7 @@ module WWWSave
         # Save single page only.
         @uri = URI.parse @options.url
       else
+        @username = @options.username
         if @options.has_actual_username_regex?
           # Capture user ID (in case login username != logged-in username).
           @browser.html[/#{@options.actual_username_regex}/]
@@ -59,16 +60,23 @@ module WWWSave
       path = "#{@options.output_dir}#{path}"
       path += 'index.html' if path[-1] == '/'
 
-      log '='*78
+      log '='*75
       log "Save page: #{uri}"
       log "       As: #{path}"
-      log '='*78
+      log '='*75
 
       begin
         first_time = !@seen_first_page
         page = get_page uri
         uri = @uri if first_time
         process_content uri, page
+
+        # Avoid HTML entities being written out in <script> content.
+        page.traverse do |node|
+          if node.name == 'script'
+            node.content = CGI.unescapeHTML node.content
+          end
+        end
 
         FileUtils.mkpath File.dirname(path) if !Dir.exists? File.dirname(path)
         File.open(path, 'w') { |f| page.write_html_to f }
@@ -97,7 +105,6 @@ module WWWSave
         @seen_first_page = true
       end
 
-      # TODO: how to avoid entities for in-page script JS code?
       # TODO: need more control?
       #Nokogiri::HTML(@browser.html) do |config|
       #  config.noblanks.noent.strict.nonet
