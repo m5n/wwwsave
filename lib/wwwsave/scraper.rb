@@ -37,6 +37,11 @@ module WWWSave
         end
         log "Username: #{@username}"
 
+        @options.paths_to_save_regexes.each do |regex|
+          regex.sub! '{{username}}', @username
+        end
+        log "Paths to save: #{@options.paths_to_save_regexes}"
+
         home_page_path = @options.home_page_path.sub '{{username}}', @username
         log "Home path: #{home_page_path}"
         home_uri = URI.parse(@browser.url).merge(home_page_path)
@@ -88,10 +93,13 @@ module WWWSave
 
       if @options.login_required && !@options.has_url?
         # TODO: save other pages
-        @options.paths_to_save_regexes
-#        "paths_to_save_regexes": [
-#          "href=['\"]/{{username}}/.*['\"]"
-#        ]
+        page.search('a[href]').each do |item|
+          @options.paths_to_save_regexes.each do |regex|
+            if item['href'][/#{regex}/]
+              log "Also save page: #{item['href']}"
+            end
+          end
+        end
       end
     end
 
