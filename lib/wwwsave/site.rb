@@ -102,19 +102,17 @@ module WWWSave
     # Get, process and save the page at the given URI and put any additional
     # page references found in `page_queue`.
     def save_page(uri, page_queue)
+      @page_uri = uri
+
+      path = local_path @page_uri, @options.output_dir
 
       @logger.log '='*75
-      @logger.log "Save page: #{uri}"
+      @logger.log "Save page: #{@page_uri}"
+      @logger.log "       As: #{path}"
+      @logger.log '='*75
 
       begin
-        # Note that `get_page` also sets @page_uri.
-        page = get_page uri
-        @logger.log "      URI: #{@page_uri}"
-
-        path = local_path @page_uri, @options.output_dir
-        @logger.log "       As: #{path}"
-        @logger.log '='*75
-
+        page = get_page @page_uri
         process_content page
 
         # Change links to local copies and find more pages to save.
@@ -171,7 +169,7 @@ module WWWSave
         FileUtils.mkpath File.dirname(path) if !Dir.exists? File.dirname(path)
         File.open(path, 'w') { |f| page.write_html_to f }
       rescue Exception => error   # TODO: something more specific?
-        puts "An error occured. Skipping #{uri}"
+        puts "An error occured. Skipping #{@page_uri}"
         puts error.message if @options.verbose
         puts error.backtrace if @options.verbose
       end
@@ -186,13 +184,9 @@ module WWWSave
       puts "Retrieving: #{uri}"
       @browser.goto uri.to_s if @browser.url != uri.to_s
 
-      # Since content references are based on paths in the URL, re-capture it
-      # in case a redirection took place.
-      @page_uri = URI.parse @browser.url
-
       if @options.has_click_if_present_selector?
         begin
-          Watir::Wait.until(1) { @browser.element(css: @options.click_if_present_selector).exists? }
+          Watir::Wait.until(2) { @browser.element(css: @options.click_if_present_selector).exists? }
           elt = @browser.element css: @options.click_if_present_selector
           elt.click if elt.exists?
         rescue Watir::Wait::TimeoutError => error
