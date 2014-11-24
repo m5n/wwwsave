@@ -81,6 +81,11 @@ module WWWSave
       end
       @logger.log "Path regexes to save: #{@options.path_regexes_to_save}"
 
+      @options.ref_regexes_to_save.each do |regex|
+        regex.sub! '{{username}}', @username
+      end
+      @logger.log "Ref regexes to save: #{@options.ref_regexes_to_save}"
+
       home_page_path = @options.home_page_path.sub '{{username}}', @username
       @logger.log "Home path: #{home_page_path}"
       @home_uri = URI.parse(@browser.url).merge home_page_path
@@ -130,8 +135,14 @@ module WWWSave
                 item['href'] = '../' + item['href'] if save_as_level == 1
               end
             end
+
+            on_path_regex_page = false
             @options.path_regexes_to_save.each do |regex|
+              on_path_regex_page = true if @page_uri.path[/#{regex}/]
+
               if item['href'][/#{regex}/]
+                on_path_regex_page = true
+
                 # TODO: not DRY (see above)--hard because add-to-queue needs
                 #       tmp vars.
                 orig_href = item['href']
@@ -144,6 +155,34 @@ module WWWSave
                 item['href'] = '../' + item['href'] if save_as_level == 1
 
                 if @page_uri != orig_uri &&   # Not currently being processed.
+                    !File.exists?(save_as) &&   # Not already saved.
+                    !page_queue.include?(orig_uri)   # Not already queued.
+                  @logger.log "Adding page: #{orig_href}"
+                  @logger.log "        URI: #{orig_uri}"
+                  @logger.log "         As: #{save_as}"
+                  @logger.log "       HTML: #{item['href']}"
+
+                  page_queue.push orig_uri
+                end
+              end
+            end
+
+            @options.ref_regexes_to_save.each do |regex|
+              if item['href'][/#{regex}/]
+                # TODO: not DRY (see above)--hard because add-to-queue needs
+                #       tmp vars.
+                orig_href = item['href']
+                orig_uri = @page_uri.merge orig_href
+                save_as = local_path orig_uri, @options.output_dir
+
+                # TODO: hack alert: length + 1 and [0..-2]... another way?
+                save_as_level = @page_uri.path.split('/').length + 1
+                item['href'] = level_prefix(save_as_level)[0..-2] + save_as
+                item['href'] = '../' + item['href'] if save_as_level == 1
+
+                # Only add to queue if it's a ref off of a user page.
+                if on_path_regex_page &&   # On page of interest.
+                    @page_uri != orig_uri &&   # Not currently being processed.
                     !File.exists?(save_as) &&   # Not already saved.
                     !page_queue.include?(orig_uri)   # Not already queued.
                   @logger.log "Adding page: #{orig_href}"
@@ -270,6 +309,9 @@ module WWWSave
         is_page = true if ref_uri.path == path
       end
       @options.path_regexes_to_save.each do |regex|
+        is_page = true if ref_uri.path[/#{regex}/]
+      end
+      @options.ref_regexes_to_save.each do |regex|
         is_page = true if ref_uri.path[/#{regex}/]
       end
 
