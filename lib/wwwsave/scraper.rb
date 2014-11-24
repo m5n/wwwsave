@@ -2,28 +2,36 @@ require 'cgi'         # for unescaping HTML entities
 require 'fileutils'   # for creating an entire dir path in one go
 require 'json'        # for parsing JSON strings
 require 'nokogiri'    # for parsing HTML documents
-require 'open-uri'    # for downloading page resources
+require 'typhoeus'    # for downloading page resources
 require 'uri'         # for parsing URLs
 require 'watir'       # for automating possibly JavaScript-driven login
 
+require 'wwwsave/css_processor'
 require 'wwwsave/errors'
+require 'wwwsave/logger'
+require 'wwwsave/page_resource'
 
 module WWWSave
   class Scraper
-    # #Seconds to wait before fetching next page.
+    # Number of seconds to wait before fetching next page.
     NEXT_PAGE_DELAY = 2
 
     def initialize(options)
       @cmd = $0.split('/').last
       @options = options
+      @logger = Logger.new @options.verbose
       @seen_first_page = false
 
-      log "Options: #{@options}"
+      @logger.log "Options: #{@options}"
     end
 
     def start
       capture_start
       @browser = Watir::Browser.new
+      @hydra = Typhoeus::Hydra.new(max_concurrency: 8)   # Simulate a browser's
+                                                         # 8 connection limit
+                                                         # (ignoring the "per
+                                                         # domain" part).
 
       # Do login before creating directories as an error could still occur.
       login if @options.login_required
@@ -40,17 +48,17 @@ module WWWSave
           @browser.html[/#{@options.actual_username_regex}/]
           @username = $1
         end
-        log "Username: #{@username}"
+        @logger.log "Username: #{@username}"
 
         @options.paths_to_save_regexes.each do |regex|
           regex.sub! '{{username}}', @username
         end
-        log "Paths to save: #{@options.paths_to_save_regexes}"
+        @logger.log "Paths to save: #{@options.paths_to_save_regexes}"
 
         home_page_path = @options.home_page_path.sub '{{username}}', @username
-        log "Home path: #{home_page_path}"
+        @logger.log "Home path: #{home_page_path}"
         home_uri = URI.parse(@browser.url).merge(home_page_path)
-        log "Home page: #{home_uri}"
+        @logger.log "Home page: #{home_uri}"
 
         @uri = home_uri
       end
@@ -68,12 +76,13 @@ module WWWSave
     def save_page(uri)
       path = local_path uri, @options.output_dir
 
-      log '='*75
-      log "Save page: #{uri}"
-      log "       As: #{path}"
-      log '='*75
+      @logger.log '='*75
+      @logger.log "Save page: #{uri}"
+      @logger.log "       As: #{path}"
+      @logger.log '='*75
 
       begin
+        # TODO: still need this first_time stuff?
         first_time = !@seen_first_page
         page = get_page uri
         uri = @uri if first_time
@@ -92,11 +101,13 @@ module WWWSave
                 save_as_level = uri.path.split('/').length + 1
                 item['href'] = level_prefix(save_as_level)[0..-2] + save_as
 
-                if !File.exists?(save_as) && !@more_pages.include?(orig_uri)
-                  log "Adding page: #{orig_href}"
-                  log "        URI: #{orig_uri}"
-                  log "         As: #{save_as}"
-                  log "       HTML: #{item['href']}"
+                if uri != orig_uri &&   # Not currently processing this page.
+                    !File.exists?(save_as) &&   # Not already saved.
+                    !@more_pages.include?(orig_uri)   # Not already queued.
+                  @logger.log "Adding page: #{orig_href}"
+                  @logger.log "        URI: #{orig_uri}"
+                  @logger.log "         As: #{save_as}"
+                  @logger.log "       HTML: #{item['href']}"
 
                   @more_pages.push orig_uri
                 end
@@ -123,9 +134,14 @@ module WWWSave
         puts error.backtrace if @options.verbose
       end
 
+      # Save page resources.
+      @logger.log "Saving #{@hydra.queued_requests.length} page resources..."
+      @hydra.run
+      @logger.log 'Done saving page resources.'
+     
       # Save the next page, if any.
       if @options.login_required && !@options.has_url?
-        log "#Pages left: #{@more_pages.length}"
+        @logger.log "#Pages left: #{@more_pages.length}"
         next_uri = @more_pages.shift
         if next_uri
           # Avoid rate limiting.
@@ -141,7 +157,7 @@ module WWWSave
       @browser.goto uri.to_s if @browser.url != uri.to_s
 
       if !@seen_first_page
-        log "Update site URI from \"#{@uri}\" to \"#{@browser.url}\""
+        @logger.log "Update site URI from \"#{@uri}\" to \"#{@browser.url}\""
         @uri = URI.parse @browser.url
         @seen_first_page = true
       end
@@ -157,7 +173,9 @@ module WWWSave
       save_as_level = page_uri.path.split('/').length - 1
 
       page.search('[style]').each do |item|
-        item['style'] = process_css item['style'], page_uri, save_as_level
+        item['style'] = CssProcessor.process(
+          item['style'], @uri, page_uri, @options.output_dir, @hydra, @logger, save_as_level
+        )
       end
 
       page.search('link[href], img[src], script[src], iframe[src]').each do |item|
@@ -167,12 +185,12 @@ module WWWSave
                                        # TODO: how to configure Nokogiri?
           ref_uri = page_uri.merge url
 
-          log "Save content: #{url}"
-          log "         URI: #{ref_uri}"
+          @logger.log "Save content: #{url}"
+          @logger.log "         URI: #{ref_uri}"
 
           new_ref = save_resource ref_uri, save_as_level
           new_ref = level_prefix(save_as_level) + new_ref
-          log "        HTML: #{new_ref}"
+          @logger.log "        HTML: #{new_ref}"
 
           # Change reference to resource in page.
           item['src'] ? item['src'] = new_ref : item['href'] = new_ref
@@ -188,71 +206,46 @@ module WWWSave
       save_as = local_path ref_uri, @options.output_dir
       new_ref = local_path ref_uri, '.'
 
-      if File.exists? save_as   # TODO: use in-memory cache?
-        log "        Skip: #{save_as}"
+#p "*** REF_URI: #{ref_uri}"
+#p "*** SAVE_AS_LEVEL: #{save_as_level}"
+#p "*** SAVE_AS: #{save_as}"
+#p "*** NEW_REF: #{new_ref}"
+
+      # Don't save pages as resources.
+      is_page = false
+      @options.paths_to_save_regexes.each do |regex|
+        is_page = true if ref_uri.path[/#{regex}/]
+      end
+
+      if is_page || File.exists?(save_as)   # TODO: use in-memory cache?
+        @logger.log "        Skip: #{save_as}"
       else
-        log "          As: #{save_as}"
+        @logger.log "          As: #{save_as}"
 
-        # Save page resources "as is".
-        dirname = File.dirname save_as
-        FileUtils.mkpath dirname if !Dir.exists? dirname
-        File.open(save_as, 'wb') do |f|
-          content = open(ref_uri).read
-
-          # TODO: any other extensions? Check something else instead?
-          if ref_uri.path.end_with? ".css"
-            ref_level = ref_uri.path.split('/').length - 1
-            content = process_css content, ref_uri, save_as_level, ref_level
-          end
-
-          f.write content
-        end
+        resource = WWWSave::PageResource.new(
+          @uri, ref_uri, save_as, save_as_level, @options.output_dir, @hydra, @logger
+        )
+        resource.save
       end
 
       new_ref
     end
 
-    def process_css(content, ref_uri, save_as_level=0, ref_level=0)
-      matches = content.scan /url\s*\(['"]?(.+?)['"]?\)/i
-      matches.map! { |m| m = m[0] }
-      matches.uniq.each do |m|
-        next if !m[/^[h\/]/i]   # Skip relative URLs or data blocks.
-
-        begin
-          uri = ref_uri.merge m
-          log "Save CSS ref: #{m}"
-          log "         URI: #{uri}"
-
-          new_ref = save_resource uri, save_as_level
-          new_ref = level_prefix(ref_level) + new_ref
-          log "        HTML: #{uri}"
-
-          content.gsub! m, new_ref
-        rescue Exception => error   # TODO: something more specific?
-          puts "An error occured. Skipping #{uri}"
-          puts error.message if @options.verbose
-          puts error.backtrace if @options.verbose
-        end
-      end
-
-      content
-    end
-
     def capture_start
       @start_time = Time.now
-      log "Start: #{@start_time}"
+      @logger.log "Start: #{@start_time}"
       puts "Going to save content to \"#{File.join '.', @options.output_dir}\""
     end
 
     def capture_finish(show_done=true)
       end_time = Time.now
       elapsed = end_time.to_i - @start_time.to_i
-      log "End: #{end_time}. Elapsed: #{elapsed / 60}m#{elapsed - (elapsed / 60) * 60}s"
+      @logger.log "End: #{end_time}. Elapsed: #{elapsed / 60}m#{elapsed - (elapsed / 60) * 60}s"
       puts 'Done!' if show_done
     end
 
     def login
-      log 'Logging in'
+      @logger.log 'Logging in'
 
       begin
         @browser.goto @options.login_page
@@ -270,7 +263,7 @@ module WWWSave
         if err_elts.length > 0
           err_text = err_elts[0].text
 
-          log 'Login error'
+          @logger.log 'Login error'
           @browser.close
           capture_finish false
           abort err_text
@@ -282,7 +275,7 @@ module WWWSave
         raise LoginError.new(error), 'Unable to log in'
       end
 
-      log 'Login success'
+      @logger.log 'Login success'
     end
 
     def logout
@@ -327,23 +320,27 @@ module WWWSave
     end
 
     def local_path(uri, prefix)
+#p "*** URI: #{uri}"
+#p "*** PREFIX: #{prefix}"
       clone = URI.parse uri.to_s
       clone.scheme = @uri.scheme   # Avoid port mismatch due to scheme.
+#p "*** CLONE: #{clone}"
 
       if "#{clone.host}:#{clone.port}" == "#{@uri.host}:#{@uri.port}"
         clone.scheme = clone.host = clone.port = nil
+#p "*** CLONE1: #{clone}"
         path = clone.to_s.empty? ? '/' : clone.to_s
       else
         clone.scheme = nil
+#p "*** CLONE2: #{clone}"
         path = clone.to_s[1..-1]   # Avoid path starting with "//".
       end
+#p "*** PATH: #{path}"
 
       path = "#{prefix}#{path}"
       path += 'index.html' if path[-1] == '/'
-    end
-
-    def log(str)
-      puts "LOG: #{str}" if @options.verbose
+#p "*** PATH: #{path}"
+      path
     end
   end
 end

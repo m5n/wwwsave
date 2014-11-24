@@ -1,13 +1,16 @@
 source 'https://rubygems.org'
 
-# The original goal was to use Mechanize, but since certain popular sites like
-# Pinterest rely on JavaScript for authentication and Mechanize cannot execute
-# JavaScript, Watir is used for browser automation.
-# https://github.com/watir/watir/
-gem 'watir'
-
-# TODO: use http://watirwebdriver.com/headless/ ?
-
-# Now that Mechanize is not used, get some help with parsing HTML documents.
+# Get some help with parsing HTML documents.
 # https://github.com/sparklemotion/nokogiri
 gem 'nokogiri'
+
+# For downloading the in-page resources, pick a tool that can manage the
+# number of simulaneous HTTP requests. (For example, open-uri cannot.)
+# https://github.com/typhoeus/typhoeus
+gem 'typhoeus'
+
+# Certain popular sites rely on JavaScript for authentication so pick a tool
+# that can execute JavaScript. (For example, Mechanize cannot.)
+# https://github.com/watir/watir/
+gem 'watir'
+# TODO: use http://watirwebdriver.com/headless/ ?
