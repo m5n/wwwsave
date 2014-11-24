@@ -5,7 +5,6 @@ require 'typhoeus'    # for downloading page resources
 require 'watir'       # for automating possibly JavaScript-driven login
 
 require 'wwwsave/errors'
-require 'wwwsave/page_resource'
 
 module WWWSave
   # Interface to the site to be `wwwsave`d, encapsulating exposure to Typhoeus
@@ -273,13 +272,39 @@ module WWWSave
       else
         @logger.log "          As: #{save_as}"
 
-        resource = WWWSave::PageResource.new(
-          @page_uri, ref_uri, save_as, save_as_level, @options.output_dir, @hydra, @logger
-        )
-        resource.save
+        process_resource ref_uri, save_as, save_as_level
       end
 
       new_ref
+    end
+
+    def process_resource(uri, save_as, save_as_level)
+      request = Typhoeus::Request.new(uri.to_s)
+
+      request.on_complete do |response|
+        begin
+          dirname = File.dirname save_as
+          FileUtils.mkpath dirname if !Dir.exists? dirname
+          File.open(save_as, 'wb') do |f|
+            content = response.body
+
+            # TODO: any other extensions? Check something else instead?
+            if uri.path.end_with? ".css"
+              ref_level = uri.path.split('/').length - 1
+              content = process_css content, uri, save_as_level, ref_level
+            end
+
+            f.write content
+            @logger.log "Wrote: #{save_as}"
+          end
+        rescue Exception => error   # TODO: something more specific?
+          puts "An error occured writing #{save_as}. Skipping."
+          puts error.message if @logger.verbose?
+          puts error.backtrace if @logger.verbose?
+        end
+      end
+
+      @hydra.queue request
     end
 
     def level_prefix(level)
