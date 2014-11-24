@@ -27,7 +27,8 @@ module WWWSave
         # Save single page only.
         uri = URI.parse @options.url
       else
-        @page_queue = []
+        @page_queue = @options.has_paths_to_save? ?
+            @site.paths_to_uris(@options.paths_to_save) : []
 
         # Start with the user's home page.
         uri = @site.home_uri
