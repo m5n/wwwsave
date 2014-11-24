@@ -101,7 +101,7 @@ module WWWSave
 
     # Get, process and save the page at the given URI and put any additional
     # page references found in `page_queue`.
-    def save_page(uri, page_queue)
+    def save_page(uri, page_queue, uri_to_get_instead=nil)
       @page_uri = uri
 
       path = local_path @page_uri, @options.output_dir
@@ -112,7 +112,7 @@ module WWWSave
       @logger.log '='*75
 
       begin
-        page = get_page @page_uri
+        page = get_page uri_to_get_instead.nil? ? @page_uri : uri_to_get_instead
         process_content page
 
         # Change links to local copies and find more pages to save.
@@ -127,6 +127,7 @@ module WWWSave
                 # TODO: hack alert: length + 1 and [0..-2]... another way?
                 save_as_level = @page_uri.path.split('/').length + 1
                 item['href'] = level_prefix(save_as_level)[0..-2] + save_as
+                item['href'] = '../' + item['href'] if save_as_level == 1
               end
             end
             @options.path_regexes_to_save.each do |regex|
@@ -140,6 +141,7 @@ module WWWSave
                 # TODO: hack alert: length + 1 and [0..-2]... another way?
                 save_as_level = @page_uri.path.split('/').length + 1
                 item['href'] = level_prefix(save_as_level)[0..-2] + save_as
+                item['href'] = '../' + item['href'] if save_as_level == 1
 
                 if @page_uri != orig_uri &&   # Not currently being processed.
                     !File.exists?(save_as) &&   # Not already saved.

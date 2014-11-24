@@ -34,9 +34,10 @@ module WWWSave
         uri = @site.home_uri
       end
 
+      @save_extra_root_copy = uri.path.split('/').length > 0
+
       init_output_dir uri
       save_page uri
-      # TODO: if uri is in a subdir, need to create a copy as /index.html
 
       @site.logout if @options.login_required
 
@@ -44,9 +45,16 @@ module WWWSave
       capture_finish
     end
 
-    def save_page(uri)
-      @site.save_page uri, @page_queue
-     
+    def save_page(uri, uri_to_get_instead=nil)
+      @site.save_page uri, @page_queue, uri_to_get_instead
+
+      if @save_extra_root_copy
+        # Save a copy in the root directory for easy access.
+        # (Do this logic here to save a request as the 1st page is still there.)
+        @site.save_page uri.merge('/'), @page_queue, uri
+        @save_extra_root_copy = false
+      end
+
       # Save the next page, if any.
       if @options.login_required && !@options.has_url?
         @logger.log "Pages left: #{@page_queue.length}"
