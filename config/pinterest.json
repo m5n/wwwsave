@@ -17,6 +17,10 @@
 
 
 
+  "click_if_present_selector": ".Modal.show .Button.primary",
+
+
+
   "paths_to_save": [
     "/settings/"
   ],

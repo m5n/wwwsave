@@ -190,6 +190,16 @@ module WWWSave
       # in case a redirection took place.
       @page_uri = URI.parse @browser.url
 
+      if @options.has_click_if_present_selector?
+        begin
+          Watir::Wait.until(1) { @browser.element(css: @options.click_if_present_selector).exists? }
+          elt = @browser.element css: @options.click_if_present_selector
+          elt.click if elt.exists?
+        rescue Watir::Wait::TimeoutError => error
+          # No such element. Ignore.
+        end
+      end
+
       # TODO: need more control?
       #Nokogiri::HTML(@browser.html) do |config|
       #  config.noblanks.noent.strict.nonet
