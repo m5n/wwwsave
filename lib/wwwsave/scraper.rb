@@ -61,17 +61,22 @@ module WWWSave
       capture_finish
     end
 
-    def save_page(uri, uri_to_get_instead=nil)
-      @site.save_page uri, @page_queue, uri_to_get_instead
+    def save_page(uri)
+      saved = @site.save_page uri, @page_queue
 
-      if @save_extra_root_copy
+      if (!@options.has_resume? || !@options.resume) && @save_extra_root_copy
         # Save a copy in the root directory for easy access.
         # (Do this logic here to save a request as the 1st page is still there.)
         @site.save_page uri.merge('/'), @page_queue, uri
         @save_extra_root_copy = false
       end
 
-      puts "Saved: #{uri}"
+      if saved
+        puts "Saved: #{uri}"
+      else
+        # Try again later.
+        @page_queue.push uri
+      end
 
 
       # Save the next page, if any.
@@ -94,7 +99,7 @@ module WWWSave
 
     def capture_start
       @start_time = Time.now
-      puts "Start: #{@start_time}"
+      @logger.log "Start: #{@start_time}"
       puts "Saving content to \"#{File.join '.', @options.output_dir}\""
     end
 
@@ -103,7 +108,8 @@ module WWWSave
 
       end_time = Time.now
       elapsed = end_time.to_i - @start_time.to_i
-      puts "End: #{end_time}. Elapsed: #{elapsed / 60}m#{elapsed - (elapsed / 60) * 60}s"
+      @logger.log "End: #{end_time}."
+      puts "Elapsed: #{elapsed / 60}m#{elapsed - (elapsed / 60) * 60}s"
       puts 'Done!' if show_done
     end
 

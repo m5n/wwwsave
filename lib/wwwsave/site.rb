@@ -230,16 +230,18 @@ module WWWSave
 
         FileUtils.mkpath File.dirname(path) if !Dir.exists? File.dirname(path)
         File.open(path, 'w') { |f| page.write_html_to f }
+
+        # Save page resources.
+        @logger.log "Saving #{@hydra.queued_requests.length} page resources..."
+        @hydra.run
+        @logger.log 'Done saving page resources.'
+        true
       rescue Exception => error   # TODO: something more specific?
         puts "An error occured. Skipping #{@page_uri}"
         puts error.message if @options.verbose
         puts error.backtrace if @options.verbose
+        false
       end
-
-      # Save page resources.
-      @logger.log "Saving #{@hydra.queued_requests.length} page resources..."
-      @hydra.run
-      @logger.log 'Done saving page resources.'
     end
 
     def get_page(uri)
