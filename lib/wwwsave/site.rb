@@ -276,6 +276,8 @@ module WWWSave
               # Height did not change. The while loop will be exited.
             end
           end
+
+          @browser.send_keys :home
         end
       end
 
@@ -326,7 +328,7 @@ module WWWSave
 
           new_ref = save_resource uri, save_as_level
           new_ref = level_prefix(ref_level) + new_ref
-          @logger.log "        HTML: #{uri}"
+          @logger.log "        HTML: #{new_ref}"
 
           content.gsub! m, new_ref
         rescue Exception => error   # TODO: something more specific?
@@ -414,6 +416,7 @@ module WWWSave
     def local_path(uri, prefix)
       clone = URI.parse uri.to_s
       clone.scheme = @page_uri.scheme   # Avoid port mismatch due to scheme.
+      clone.query = clone.fragment = nil   # Avoid special chars in file names.
 
       if "#{clone.host}:#{clone.port}" == "#{@page_uri.host}:#{@page_uri.port}"
         clone.scheme = clone.host = clone.port = nil
@@ -426,6 +429,7 @@ module WWWSave
 
       path = "#{prefix}#{path}"
       path += 'index.html' if path[-1] == '/'
+      path   # Needed because of if condition above!
     end
   end
 end
