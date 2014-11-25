@@ -9,4 +9,7 @@ module WWWSave
 
   class LoginError < WWWSaveError
   end
+
+  class NotResumableError < WWWSaveError
+  end
 end

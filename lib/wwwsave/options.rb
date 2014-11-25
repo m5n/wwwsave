@@ -56,12 +56,12 @@ module WWWSave
           options['password'] = p if !p.nil?
         end
 
-        opts.on('-s', '--site [SITE_ID]', 'Enable login & personal content discovery', '    (supported site IDs are listed below)') do |s|
-          options['site'] = s if !s.nil?
+        opts.on('--[no-]resume', 'Resume interrupted save') do |r|
+          options['resume'] = r
         end
 
-        opts.on('--[no-]update', 'Update previously saved content') do |u|
-          options['update'] = u
+        opts.on('-s', '--site [SITE_ID]', 'Enable login & personal content discovery', '    (supported site IDs are listed below)') do |s|
+          options['site'] = s if !s.nil?
         end
 
         opts.on('--url [URL]', 'Page to save', '    (no other page will be saved)') do |url|
@@ -121,7 +121,7 @@ EOS
       if options.has_key? 'url'
         # Validate URL.
         begin
-          uri = URI.parse(options['url'])
+          uri = URI.parse options['url']
           raise URI::InvalidURIError if !uri.kind_of?(URI::HTTP)
         rescue URI::InvalidURIError => error
           puts error.message if options['verbose']
@@ -131,7 +131,8 @@ EOS
       end
 
       # Now the output dir can be set if it wasn't passed as an option.
-      if !options.has_key? 'output_dir'
+      if !options.has_key?('output_dir') &&
+          (options.has_key?('site') || options.has_key?('url'))
         # Extract site identifier from URL if no site ID was passed in.
         options['output_dir'] = "#{cmd}-#{options['site'] || uri.host}"
       end
