@@ -32,6 +32,7 @@ module WWWSave
 
         # Start with the user's home page.
         uri = @site.home_uri
+        @page_queue.delete uri
       end
 
       @save_extra_root_copy = uri.path.split('/').length > 0
@@ -55,9 +56,12 @@ module WWWSave
         @save_extra_root_copy = false
       end
 
+      puts "Saved: #{uri}"
+
       # Save the next page, if any.
       if @options.login_required && !@options.has_url?
-        @logger.log "Pages left: #{@page_queue.length}"
+        puts "Pages left: #{@page_queue.length}"
+
         if @page_queue.length > 0
           # Avoid rate limiting.
           sleep NEXT_PAGE_DELAY
@@ -69,14 +73,14 @@ module WWWSave
 
     def capture_start
       @start_time = Time.now
-      @logger.log "Start: #{@start_time}"
-      puts "Going to save content to \"#{File.join '.', @options.output_dir}\""
+      puts "Start: #{@start_time}"
+      puts "Saving content to \"#{File.join '.', @options.output_dir}\""
     end
 
     def capture_finish(show_done=true)
       end_time = Time.now
       elapsed = end_time.to_i - @start_time.to_i
-      @logger.log "End: #{end_time}. Elapsed: #{elapsed / 60}m#{elapsed - (elapsed / 60) * 60}s"
+      puts "End: #{end_time}. Elapsed: #{elapsed / 60}m#{elapsed - (elapsed / 60) * 60}s"
       puts 'Done!' if show_done
     end
 
