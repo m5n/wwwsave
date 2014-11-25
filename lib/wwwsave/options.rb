@@ -48,7 +48,7 @@ module WWWSave
           exit   # TODO: can control be passed back to main program?
         end
 
-        opts.on('-o', '--outputdir [DIRECTORY]', 'Directory to save pages to', "    (default: \"./#{cmd}-<web site ID>\"") do |o|
+        opts.on('--outputdir [DIRECTORY]', 'Directory to save pages to', "    (default: \"./#{cmd}-<web site ID>\"") do |o|
           options['output_dir'] = o if !o.nil?
         end
 
@@ -60,16 +60,20 @@ module WWWSave
           options['site'] = s if !s.nil?
         end
 
+        opts.on('--[no-]update', 'Update previously saved content') do |u|
+          options['update'] = u
+        end
+
+        opts.on('--url [URL]', 'Page to save', '    (no other page will be saved)') do |url|
+          options['url'] = url if !url.nil?
+        end
+
         opts.on('-u', '--username [USERNAME]', 'Username for login') do |u|
           options['username'] = u if !u.nil?
         end
 
         opts.on('-v', '--[no-]verbose', 'Run verbosely', "    (default: #{options['verbose']})") do |v|
           options['verbose'] = v
-        end
-
-        opts.on('--url [URL]', 'Page to save', '    (no other page will be saved)') do |url|
-          options['url'] = url if !url.nil?
         end
 
         opts.on('--version', 'Show version') do

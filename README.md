@@ -10,16 +10,17 @@ Usage: wwwsave [options]
 Options:
 
     -h, --help                       Show this message
-    -o, --outputdir [DIRECTORY]      Directory to save pages to
+        --outputdir [DIRECTORY]      Directory to save pages to
                                          (default: "./wwwsave-<web site ID>"
     -p, --password [PASSWORD]        Password for login
     -s, --site [SITE_ID]             Enable login & personal content discovery
                                          (supported site IDs are listed below)
+        --[no-]update                Update previously saved content
+        --url [URL]                  Page to save
+                                         (no other page will be saved)
     -u, --username [USERNAME]        Username for login
     -v, --[no-]verbose               Run verbosely
                                          (default: false)
-        --url [URL]                  Page to save
-                                         (no other page will be saved)
         --version                    Show version
 
 

@@ -86,14 +86,14 @@ module WWWSave
 
     def init_output_dir(site_uri)
       # Back up previous copy if needed.
-      if Dir.exists? @options.output_dir
+      if !@options.update && Dir.exists?(@options.output_dir)
         ts = Time.now.to_i
         puts "Renaming existing directory to \"#{File.join '.', @options.output_dir}.#{ts}\""
         File.rename @options.output_dir, "#{@options.output_dir}.#{ts}"
       end
 
       # Create output directory.
-      Dir.mkdir @options.output_dir
+      Dir.mkdir(@options.output_dir) if !Dir.exists?(@options.output_dir)
 
       # Output info about this copy.
       File.open "#{@options.output_dir}/README", 'w' do |f|
