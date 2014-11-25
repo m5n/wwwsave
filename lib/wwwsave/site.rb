@@ -16,10 +16,11 @@ module WWWSave
       @logger = logger
 
       @browser = Watir::Browser.new
-      @hydra = Typhoeus::Hydra.new(max_concurrency: 8)   # Simulate a browser's
-                                                         # 8 connection limit
-                                                         # (ignoring the "per
-                                                         # domain" part).
+      @browser.window.maximize
+
+      # A browser usually has 8 connections per domain, but the browser still
+      # gets stuck once in a while with that number. Use something lower.
+      @hydra = Typhoeus::Hydra.new(max_concurrency: 5)
     end
 
     def login
@@ -58,7 +59,7 @@ module WWWSave
 
           @logger.log 'Login error'
           cleanup
-          capture_finish false
+          # TODO: capture_finish false
           abort err_text
         end
       rescue Watir::Wait::TimeoutError => error
@@ -102,6 +103,11 @@ module WWWSave
       end
       @logger.log "Ref regexes to save: #{@options.ref_regexes_from_paths_to_save}"
 
+      @options.paths_to_exclude.each do |path|
+        path.sub! '{{username}}', @username
+      end
+      @logger.log "Paths to exclude: #{@options.paths_to_exclude}"
+
       home_page_path = @options.home_page_path.sub '{{username}}', @username
       @logger.log "Home path: #{home_page_path}"
       @home_uri = URI.parse(@browser.url).merge home_page_path
@@ -132,33 +138,39 @@ module WWWSave
         page = get_page uri_to_get_instead.nil? ? @page_uri : uri_to_get_instead
         process_content page
 
-        # Change links to local copies and find more pages to save.
+        # Change links to pages that will be saved to local copies and find
+        # more pages to save.
         if @options.login_required && !@options.has_url?
           page.search('a[href]').each do |item|
+            orig_href = item['href']
+            orig_uri = @page_uri.merge orig_href
+
+            # If this href will not be saved, no need to process it either.
+            next if @options.paths_to_exclude.include? orig_uri.path
+
+            on_path = false
+
             @options.paths_to_save.each do |p|
+              on_path = true if @page_uri.path == p
+
               if item['href'] == p
-                orig_href = item['href']
-                orig_uri = @page_uri.merge orig_href
                 save_as = local_path orig_uri, @options.output_dir
 
                 # TODO: hack alert: length + 1 and [0..-2]... another way?
                 save_as_level = @page_uri.path.split('/').length + 1
                 item['href'] = level_prefix(save_as_level)[0..-2] + save_as
                 item['href'] = '../' + item['href'] if save_as_level == 1
+
+                break;   # Unlike with regexes, no other match possible.
               end
             end
 
-            on_path_regex_page = false
             @options.path_regexes_to_save.each do |regex|
-              on_path_regex_page = true if @page_uri.path[/#{regex}/]
+              on_path = true if @page_uri.path[/#{regex}/]
 
               if item['href'][/#{regex}/]
-                on_path_regex_page = true
-
                 # TODO: not DRY (see above)--hard because add-to-queue needs
                 #       tmp vars.
-                orig_href = item['href']
-                orig_uri = @page_uri.merge orig_href
                 save_as = local_path orig_uri, @options.output_dir
 
                 # TODO: hack alert: length + 1 and [0..-2]... another way?
@@ -180,11 +192,10 @@ module WWWSave
             end
 
             @options.ref_regexes_from_paths_to_save.each do |regex|
-              if item['href'][/#{regex}/]
+              # Only process if it's a reference off of an included page.
+              if on_path && item['href'][/#{regex}/]
                 # TODO: not DRY (see above)--hard because add-to-queue needs
                 #       tmp vars.
-                orig_href = item['href']
-                orig_uri = @page_uri.merge orig_href
                 save_as = local_path orig_uri, @options.output_dir
 
                 # TODO: hack alert: length + 1 and [0..-2]... another way?
@@ -192,9 +203,7 @@ module WWWSave
                 item['href'] = level_prefix(save_as_level)[0..-2] + save_as
                 item['href'] = '../' + item['href'] if save_as_level == 1
 
-                # Only add to queue if it's a ref off of a user page.
-                if on_path_regex_page &&   # On page of interest.
-                    @page_uri != orig_uri &&   # Not currently being processed.
+                if @page_uri != orig_uri &&   # Not currently being processed.
                     !File.exists?(save_as) &&   # Not already saved.
                     !page_queue.include?(orig_uri)   # Not already queued.
                   @logger.log "Adding page: #{orig_href}"
@@ -234,7 +243,7 @@ module WWWSave
     end
 
     def get_page(uri)
-      puts "Retrieving: #{uri}"
+      @logger.log "Retrieving: #{uri}"
       @browser.goto uri.to_s if @browser.url != uri.to_s
 
       if @options.has_click_if_present_selector?
@@ -347,14 +356,20 @@ module WWWSave
 
       # Don't save pages as resources.
       is_page = false
-      @options.paths_to_save.each do |path|
-        is_page = true if ref_uri.path == path
+      if @options.has_paths_to_save?
+        @options.paths_to_save.each do |path|
+          is_page = true if ref_uri.path == path
+        end
       end
-      @options.path_regexes_to_save.each do |regex|
-        is_page = true if ref_uri.path[/#{regex}/]
+      if @options.has_path_regexes_to_save?
+        @options.path_regexes_to_save.each do |regex|
+          is_page = true if ref_uri.path[/#{regex}/]
+        end
       end
-      @options.ref_regexes_from_paths_to_save.each do |regex|
-        is_page = true if ref_uri.path[/#{regex}/]
+      if @options.has_ref_regexes_from_paths_to_save?
+        @options.ref_regexes_from_paths_to_save.each do |regex|
+          is_page = true if ref_uri.path[/#{regex}/]
+        end
       end
 
       if is_page || File.exists?(save_as)   # TODO: use in-memory cache?

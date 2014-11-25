@@ -24,6 +24,7 @@
 
 
   "paths_to_save": [
+    "/{{username}}/",
     "/settings/"
   ],
 
@@ -33,5 +34,11 @@
 
   "ref_regexes_from_paths_to_save": [
     "^/pin/\\d+/$"
+  ],
+
+  "paths_to_exclude": [
+    "/{{username}}/pins/",
+    "/{{username}}/followers/",
+    "/{{username}}/following/"
   ]
 }
