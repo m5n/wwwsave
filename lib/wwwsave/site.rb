@@ -7,9 +7,10 @@ require 'watir'       # for automating possibly JavaScript-driven login
 require 'wwwsave/errors'
 
 module WWWSave
-  # Interface to the site to be `wwwsave`d, encapsulating exposure to Typhoeus
-  # and Watir.
+  # Interface to the site to be saved, encapsulating Typhoeus and Watir.
   class Site
+    attr_reader :home_uri
+
     def initialize(options, logger)
       @options = options
       @logger = logger
@@ -30,11 +31,26 @@ module WWWSave
 
         form = @browser.element :css => @options.login_form_selector
 
-        form.text_field(:name => @options.login_form_username_field_name).when_present.set @options.username
-        form.text_field(:name => @options.login_form_password_field_name).when_present.set @options.password
-        form.element(:css => @options.login_form_submit_button_selector).when_present.click
+        form.text_field(
+          :name => @options.login_form_username_field_name
+        ).when_present.set @options.username
 
-        Watir::Wait.until { @browser.elements(:css => @options.login_error_text_selector).length > 0 || @browser.elements(:css => @options.login_success_element_selector).length > 0 }
+        form.text_field(
+          :name => @options.login_form_password_field_name
+        ).when_present.set @options.password
+
+        form.element(
+          :css => @options.login_form_submit_button_selector
+        ).when_present.click
+
+        Watir::Wait.until do
+          @browser.elements(
+            :css => @options.login_error_text_selector
+          ).length > 0 ||
+              @browser.elements(
+                :css => @options.login_success_element_selector
+              ).length > 0
+        end
 
         err_elts = @browser.elements :css => @options.login_error_text_selector
         if err_elts.length > 0
@@ -81,19 +97,15 @@ module WWWSave
       end
       @logger.log "Path regexes to save: #{@options.path_regexes_to_save}"
 
-      @options.ref_regexes_to_save.each do |regex|
+      @options.ref_regexes_from_paths_to_save.each do |regex|
         regex.sub! '{{username}}', @username
       end
-      @logger.log "Ref regexes to save: #{@options.ref_regexes_to_save}"
+      @logger.log "Ref regexes to save: #{@options.ref_regexes_from_paths_to_save}"
 
       home_page_path = @options.home_page_path.sub '{{username}}', @username
       @logger.log "Home path: #{home_page_path}"
       @home_uri = URI.parse(@browser.url).merge home_page_path
       @logger.log "Home page: #{home_uri}"
-    end
-
-    def home_uri
-      @home_uri
     end
 
     def paths_to_uris(paths)
@@ -167,7 +179,7 @@ module WWWSave
               end
             end
 
-            @options.ref_regexes_to_save.each do |regex|
+            @options.ref_regexes_from_paths_to_save.each do |regex|
               if item['href'][/#{regex}/]
                 # TODO: not DRY (see above)--hard because add-to-queue needs
                 #       tmp vars.
@@ -227,7 +239,9 @@ module WWWSave
 
       if @options.has_click_if_present_selector?
         begin
-          Watir::Wait.until(2) { @browser.element(css: @options.click_if_present_selector).exists? }
+          Watir::Wait.until(2) do
+            @browser.element(css: @options.click_if_present_selector).exists?
+          end
           elt = @browser.element css: @options.click_if_present_selector
           elt.click if elt.exists?
         rescue Watir::Wait::TimeoutError => error
@@ -235,10 +249,36 @@ module WWWSave
         end
       end
 
-      # TODO: need more control?
-      #Nokogiri::HTML(@browser.html) do |config|
-      #  config.noblanks.noent.strict.nonet
-      #end
+      if @options.has_lazy_load_on_paths? && @options.lazy_load_on_paths
+        on_path = false
+        @options.paths_to_save.each do |path|
+          on_path = true if uri.path == path
+        end
+        @options.path_regexes_to_save.each do |regex|
+          on_path = true if uri.path[/#{regex}/]
+        end
+
+        if on_path
+          scroll_height = 0
+
+          # Lazily load all content by controlling the page scroll position.
+          while scroll_height != @browser.body.attribute_value('scrollHeight')
+            scroll_height = @browser.body.attribute_value('scrollHeight')
+
+            @browser.send_keys :end
+
+            begin
+              # Wait until additional content, if any, is added.
+              Watir::Wait.until(4) do
+                scroll_height != @browser.body.attribute_value('scrollHeight')
+              end
+            rescue Watir::Wait::TimeoutError => error
+              # Height did not change. The while loop will be exited.
+            end
+          end
+        end
+      end
+
       Nokogiri::HTML @browser.html
     end
 
@@ -311,7 +351,7 @@ module WWWSave
       @options.path_regexes_to_save.each do |regex|
         is_page = true if ref_uri.path[/#{regex}/]
       end
-      @options.ref_regexes_to_save.each do |regex|
+      @options.ref_regexes_from_paths_to_save.each do |regex|
         is_page = true if ref_uri.path[/#{regex}/]
       end
 
@@ -386,7 +426,6 @@ module WWWSave
 
       path = "#{prefix}#{path}"
       path += 'index.html' if path[-1] == '/'
-      path
     end
   end
 end

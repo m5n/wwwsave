@@ -19,6 +19,8 @@
 
   "click_if_present_selector": ".Modal.show .Button.primary",
 
+  "lazy_load_on_paths": true,
+
 
 
   "paths_to_save": [
@@ -29,7 +31,7 @@
     "^/{{username}}/.*"
   ],
 
-  "ref_regexes_to_save": [
+  "ref_regexes_from_paths_to_save": [
     "^/pin/\\d+/$"
   ]
 }
