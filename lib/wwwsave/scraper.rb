@@ -16,9 +16,12 @@ module WWWSave
 
       @logger.log "Options: #{@options}"
 
-      if @options.has_resume? && @options.resume &&
-          !File.exists?("#{@options.output_dir}/.pending")
-        raise NotResumableError.new, 'Nothing to resume.'
+      if @options.has_resume? && @options.resume
+        if File.exists?("#{@options.output_dir}/.pending")
+          puts "Resuming save."
+        else
+          raise NotResumableError.new, 'Nothing to resume.'
+        end
       end
     end
 
