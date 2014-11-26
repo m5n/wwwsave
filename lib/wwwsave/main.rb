@@ -34,29 +34,32 @@ module WWWSave
 
       if @options.has_url?
         # Save single page only.
-        uri = URI.parse @options.url
+        first_uri = home_uri = URI.parse @options.url
       else
+        home_uri = @site.home_uri
         if @options.has_resume? && @options.resume
           @page_queue = Marshal.load(
             File.read("#{@options.output_dir}/.pending")
           )
 
           # Resume with next page.
-          uri = @page_queue.shift
+          first_uri = @page_queue.shift
         else
           @page_queue = @options.has_paths_to_save? ?
               @site.paths_to_uris(@options.paths_to_save) : []
 
           # Start with the user's home page.
-          uri = @site.home_uri
-          @page_queue.delete uri
+          first_uri = home_uri
+          @page_queue.delete first_uri
         end
       end
 
-      @save_extra_root_copy = uri.path.split('/').length > 0
+      @save_extra_root_copy =
+          (!@options.has_resume? || !@options.resume) &&   # Not resuming.
+          first_uri.path.split('/').length > 0             # Not root path.
 
-      init_output_dir uri
-      save_page uri
+      init_output_dir home_uri
+      save_page first_uri
 
       @site.logout if @options.login_required
 
@@ -67,7 +70,7 @@ module WWWSave
     def save_page(uri)
       saved = @site.save_page uri, @page_queue
 
-      if (!@options.has_resume? || !@options.resume) && @save_extra_root_copy
+      if @save_extra_root_copy
         # Save a copy in the root directory for easy access.
         # (Do this logic here to save a request as the 1st page is still there.)
         @site.save_page uri.merge('/'), @page_queue, uri
