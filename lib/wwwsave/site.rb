@@ -143,7 +143,14 @@ module WWWSave
         if @options.login_required && !@options.has_url?
           page.search('a[href]').each do |item|
             orig_href = item['href']
-            orig_uri = @page_uri.merge orig_href
+
+            # Don't break on invalid URLs, e.g. "http://ex*mple.com".
+            begin
+              orig_uri = @page_uri.merge orig_href
+            rescue
+              @logger.log "Skipping invalid href value: #{orig_href}"
+              next;
+            end
 
             # If this href will not be saved, no need to process it either.
             next if @options.paths_to_exclude.include? orig_uri.path
