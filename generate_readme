@@ -1,8 +1,12 @@
 #!/usr/bin/ruby
 
+require_relative 'lib/wwwsave/version'
+
 template = IO.read './README.template'
 usage = `./wwwsave -h`
+version = WWWSave::Version::VERSION
 
 template.gsub! '{{usage}}', usage
+template.gsub! '{{version}}', version
 
 IO.write 'README.md', template
