@@ -50,7 +50,7 @@ The following IDs are supported for sites requiring login:
 
 Adding authentication for other sites
 -------------------------------------
-Copy one of the existing config/*.json files and provide values for the site you're interested in. Be careful to target elements that are visible.
+Copy one of the existing config/*.json files and provide values for the site you're interested in. See the [Site Config File Explained](https://github.com/m5n/wwwsave/wiki/Site-Config-File-Explained) Wiki page for more information.
 
 
 Developer setup
