@@ -20,7 +20,7 @@ module WWWSave
 
       # A browser usually has 8 connections per domain, but the browser still
       # gets stuck once in a while with that number. Use something lower.
-      @hydra = Typhoeus::Hydra.new(max_concurrency: 5)
+      @hydra = Typhoeus::Hydra.new(max_concurrency: 6)
     end
 
     def login
@@ -248,12 +248,12 @@ module WWWSave
       @logger.log "Retrieving: #{uri}"
       @browser.goto uri.to_s if @browser.url != uri.to_s
 
-      if @options.has_click_if_present_selector?
+      if @options.has_click_if_present_on_paths_selector?
         begin
           Watir::Wait.until(2) do
-            @browser.element(css: @options.click_if_present_selector).exists?
+            @browser.element(css: @options.click_if_present_on_paths_selector).exists?
           end
-          elt = @browser.element css: @options.click_if_present_selector
+          elt = @browser.element css: @options.click_if_present_on_paths_selector
           elt.click if elt.exists?
         rescue Watir::Wait::TimeoutError => error
           # No such element. Ignore.
@@ -268,6 +268,7 @@ module WWWSave
         @options.path_regexes_to_save.each do |regex|
           on_path = true if uri.path[/#{regex}/]
         end
+        # TODO: set to false if uri.path is in paths_to_exclude?
 
         if on_path
           scroll_height = 0

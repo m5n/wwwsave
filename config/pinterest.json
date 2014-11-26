@@ -17,7 +17,7 @@
 
 
 
-  "click_if_present_selector": ".Modal.show .Button.primary",
+  "click_if_present_on_paths_selector": ".Modal.show .Button.primary",
 
   "lazy_load_on_paths": true,
 
