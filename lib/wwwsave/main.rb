@@ -5,7 +5,7 @@ require 'wwwsave/logger'
 require 'wwwsave/site'
 
 module WWWSave
-  class Scraper
+  class Main
     # Number of seconds to wait before fetching next page.
     NEXT_PAGE_DELAY = 2
 
@@ -107,7 +107,9 @@ module WWWSave
     end
 
     def capture_finish(show_done=true)
-      File.delete "#{@options.output_dir}/.pending" if @page_queue.length == 0
+      if @options.login_required && !@options.has_url?
+        File.delete "#{@options.output_dir}/.pending" if @page_queue.length == 0
+      end
 
       end_time = Time.now
       elapsed = end_time.to_i - @start_time.to_i

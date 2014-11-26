@@ -1,16 +1,16 @@
 require 'net/http'   # for SocketError
 
 require 'wwwsave/errors'
+require 'wwwsave/main'
 require 'wwwsave/options'
-require 'wwwsave/scraper'
 
 module WWWSave
   class CLI
     def self.start(argv)
       begin
         options = WWWSave::Options.new argv
-        scraper = WWWSave::Scraper.new options
-        scraper.start
+        main = WWWSave::Main.new options
+        main.start
       rescue ArgumentError => error   # raised by WWWSave::Options
         puts error.message
       rescue WWWSaveError => error    # raised by WWWSave::Scraper & ::Site

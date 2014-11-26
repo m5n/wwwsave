@@ -237,7 +237,7 @@ module WWWSave
         @logger.log 'Done saving page resources.'
         true
       rescue Exception => error   # TODO: something more specific?
-        puts "An error occured. Skipping #{@page_uri}"
+        puts "Error saving #{@page_uri}. Will retry later."
         puts error.message if @options.verbose
         puts error.backtrace if @options.verbose
         false
