@@ -7,5 +7,22 @@
   "login_form_submit_button_selector": "button[name='action:login']",
 
   "login_success_element_selector": "button.b-flatbutton-red",
-  "login_error_text_selector": ".b-bubble-warning ul li"
+  "login_error_text_selector": ".b-bubble-warning ul li",
+
+
+
+  "home_page": "http://{{username}}.livejournal.com",
+
+
+
+  "content_to_save": [
+    "regex:^{{home_page}}",
+    "http://www.livejournal.com/manage/settings/",
+    "http://www.livejournal.com/tools/memories.bml?user={{username}}"
+  ],
+
+  "content_to_exclude": [
+    "/friends/",
+    "regex:/\\d+.html?mode=reply#add_comment"
+  ]
 }

@@ -13,7 +13,7 @@
 
   "actual_username_regex": "P.start.start\\(.*?\"username\":\\s+\"(.+?)\"",
 
-  "home_page_path": "/{{username}}/",
+  "home_page": "http://www.pinterest.com/{{username}}/",
 
 
 
@@ -23,22 +23,18 @@
 
 
 
-  "paths_to_save": [
-    "/{{username}}/",
+  "content_to_save": [
+    "regex:^{{home_page}}",
     "/settings/"
   ],
 
-  "path_regexes_to_save": [
-    "^/{{username}}/.*"
-  ],
-
-  "ref_regexes_from_paths_to_save": [
-    "^/pin/\\d+/$"
-  ],
-
-  "paths_to_exclude": [
+  "content_to_exclude": [
     "/{{username}}/pins/",
     "/{{username}}/followers/",
     "/{{username}}/following/"
+  ],
+
+  "content_to_save_only_if_linked_from_other_content": [
+    "regex:^http://www.pinterest.com/pin/\\d+/$"
   ]
 }

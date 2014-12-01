@@ -88,34 +88,38 @@ module WWWSave
       end
       @logger.log "Username: #{@username}"
 
-      @options.paths_to_save.each do |path|
-        path.sub! '{{username}}', @username
-      end
-      @logger.log "Paths to save: #{@options.paths_to_save}"
+      home_page = @options.home_page.sub '{{username}}', @username
+      @logger.log "Home page: #{home_page}"
+      @home_uri = URI.parse(@browser.url).merge home_page
+      @logger.log "Home uri: #{home_uri}"
 
-      @options.path_regexes_to_save.each do |regex|
-        regex.sub! '{{username}}', @username
+      if @options.has_content_to_save?
+        @options.content_to_save.each do |item|
+          item.sub! '{{username}}', @username
+          item.sub! '{{home_page}}', @home_uri.to_s
+        end
+        @logger.log "Content pages to save: #{@options.content_to_save}"
       end
-      @logger.log "Path regexes to save: #{@options.path_regexes_to_save}"
 
-      @options.ref_regexes_from_paths_to_save.each do |regex|
-        regex.sub! '{{username}}', @username
+      if @options.has_content_to_exclude?
+        @options.content_to_exclude.each do |item|
+          item.sub! '{{username}}', @username
+          item.sub! '{{home_page}}', @home_uri.to_s
+        end
+        @logger.log "Content pages to exclude: #{@options.content_to_exclude}"
       end
-      @logger.log "Ref regexes to save: #{@options.ref_regexes_from_paths_to_save}"
 
-      @options.paths_to_exclude.each do |path|
-        path.sub! '{{username}}', @username
+      if @options.has_content_to_save_only_if_linked_from_other_content?
+        @options.content_to_save_only_if_linked_from_other_content.each do |item|
+          item.sub! '{{username}}', @username
+          item.sub! '{{home_page}}', @home_uri.to_s
+        end
+        @logger.log "Special linked content to save: #{@options.content_to_save_only_if_linked_from_other_content}"
       end
-      @logger.log "Paths to exclude: #{@options.paths_to_exclude}"
-
-      home_page_path = @options.home_page_path.sub '{{username}}', @username
-      @logger.log "Home path: #{home_page_path}"
-      @home_uri = URI.parse(@browser.url).merge home_page_path
-      @logger.log "Home page: #{home_uri}"
     end
 
-    def paths_to_uris(paths)
-      paths.map { |path| URI.parse(@browser.url).merge path }
+    def merge_with_home_uri(arr)
+      arr.map { |str| @home_uri.merge str }
     end
 
     def cleanup
@@ -140,7 +144,7 @@ module WWWSave
 
         # Change links to pages that will be saved to local copies and find
         # more pages to save.
-        if @options.login_required && !@options.has_url?
+        if !@options.has_url?
           page.search('a[href]').each do |item|
             orig_href = item['href']
 
@@ -153,31 +157,33 @@ module WWWSave
             end
 
             # If this href will not be saved, no need to process it either.
-            next if @options.paths_to_exclude.include? orig_uri.path
-
-            on_path = false
-
-            @options.paths_to_save.each do |p|
-              on_path = true if @page_uri.path == p
-
-              if item['href'] == p
-                save_as = local_path orig_uri, @options.output_dir
-
-                # TODO: hack alert: length + 1 and [0..-2]... another way?
-                save_as_level = @page_uri.path.split('/').length + 1
-                item['href'] = level_prefix(save_as_level)[0..-2] + save_as
-                item['href'] = '../' + item['href'] if save_as_level == 1
-
-                break;   # Unlike with regexes, no other match possible.
+            is_exclude_page = false
+            @options.content_to_exclude.each do |item2|
+              if item2.start_with? 'regex:'
+                regex = item2['regex:'.length..-1]
+                is_exclude_page = true if orig_uri.to_s[/#{regex}/i]
+              else
+                content_uri = @home_uri.merge item2
+                # TODO: this merge happens a lot, store URIs in content_to* arrs?
+                is_exclude_page = true if orig_uri == content_uri
               end
             end
+            next if is_exclude_page
 
-            @options.path_regexes_to_save.each do |regex|
-              on_path = true if @page_uri.path[/#{regex}/]
+            on_content_page = false
 
-              if item['href'][/#{regex}/]
-                # TODO: not DRY (see above)--hard because add-to-queue needs
-                #       tmp vars.
+            @options.content_to_save.each do |item2|
+              if item2.start_with? 'regex:'
+                regex = item2['regex:'.length..-1]
+                on_content_page = true if @page_uri.to_s[/#{regex}/i]
+                match = orig_uri.to_s[/#{regex}/]
+              else
+                content_uri = @home_uri.merge item2
+                on_content_page = true if @page_uri == content_uri
+                match = orig_uri == content_uri
+              end
+
+              if match
                 save_as = local_path orig_uri, @options.output_dir
 
                 # TODO: hack alert: length + 1 and [0..-2]... another way?
@@ -185,7 +191,10 @@ module WWWSave
                 item['href'] = level_prefix(save_as_level)[0..-2] + save_as
                 item['href'] = '../' + item['href'] if save_as_level == 1
 
-                if @page_uri != orig_uri &&   # Not currently being processed.
+                # Items that are not regex'es were already added to page_queue
+                # by Main, so only regex'es need to be inspected here.
+                if item2.start_with?('regex:') &&   # Is a regex.
+                    @page_uri != orig_uri &&   # Not currently being processed.
                     !File.exists?(save_as) &&   # Not already saved.
                     !page_queue.include?(orig_uri)   # Not already queued.
                   @logger.log "Adding page: #{orig_href}"
@@ -198,9 +207,22 @@ module WWWSave
               end
             end
 
-            @options.ref_regexes_from_paths_to_save.each do |regex|
-              # Only process if it's a reference off of an included page.
-              if on_path && item['href'][/#{regex}/]
+            # Only process if special linkage option is defined.
+            next if !@options.has_content_to_save_only_if_linked_from_other_content?
+
+            # Only process if it's a reference off of an included page.
+            next if !on_content_page
+
+            @options.content_to_save_only_if_linked_from_other_content.each do |item2|
+              if item2.start_with? 'regex:'
+                regex = item2['regex:'.length..-1]
+                match = orig_uri.to_s[/#{regex}/]
+              else
+                content_uri = @home_uri.merge item2
+                match = orig_uri == content_uri
+              end
+
+              if match
                 # TODO: not DRY (see above)--hard because add-to-queue needs
                 #       tmp vars.
                 save_as = local_path orig_uri, @options.output_dir
@@ -210,6 +232,8 @@ module WWWSave
                 item['href'] = level_prefix(save_as_level)[0..-2] + save_as
                 item['href'] = '../' + item['href'] if save_as_level == 1
 
+                # No pages or regex'es of this list option has been added yet,
+                # so unlike above, don't inspect just regex'es here.
                 if @page_uri != orig_uri &&   # Not currently being processed.
                     !File.exists?(save_as) &&   # Not already saved.
                     !page_queue.include?(orig_uri)   # Not already queued.
@@ -268,16 +292,20 @@ module WWWSave
       end
 
       if @options.has_lazy_load_on_paths? && @options.lazy_load_on_paths
-        on_path = false
-        @options.paths_to_save.each do |path|
-          on_path = true if uri.path == path
+        on_content_page = false
+        @options.content_to_save.each do |item|
+          if item.start_with? 'regex:'
+            regex = item['regex:'.length..-1]
+            on_content_page = true if uri.to_s[/#{regex}/i]
+          else
+            content_uri = @home_uri.merge item
+            on_content_page = true if uri == content_uri
+          end
         end
-        @options.path_regexes_to_save.each do |regex|
-          on_path = true if uri.path[/#{regex}/]
-        end
-        # TODO: set to false if uri.path is in paths_to_exclude?
+        # TODO: set to false if uri.path is in content_to_exclude?
+        #       (no because excluded pages will never reach get_page?)
 
-        if on_path
+        if on_content_page
           scroll_height = 0
 
           # Lazily load all content by controlling the page scroll position.
@@ -365,24 +393,31 @@ module WWWSave
       new_ref = local_path ref_uri, '.'
 
       # Don't save pages as resources.
-      is_page = false
-      if @options.has_paths_to_save?
-        @options.paths_to_save.each do |path|
-          is_page = true if ref_uri.path == path
+      is_content_page = false
+      if @options.has_content_to_save?
+        @options.content_to_save.each do |item|
+          if item.start_with? 'regex:'
+            regex = item['regex:'.length..-1]
+            is_content_page = true if ref_uri.to_s[/#{regex}/i]
+          else
+            content_uri = @home_uri.merge item
+            is_content_page = true if ref_uri == content_uri
+          end
         end
       end
-      if @options.has_path_regexes_to_save?
-        @options.path_regexes_to_save.each do |regex|
-          is_page = true if ref_uri.path[/#{regex}/]
-        end
-      end
-      if @options.has_ref_regexes_from_paths_to_save?
-        @options.ref_regexes_from_paths_to_save.each do |regex|
-          is_page = true if ref_uri.path[/#{regex}/]
+      if @options.has_content_to_save_only_if_linked_from_other_content?
+        @options.content_to_save_only_if_linked_from_other_content.each do |item|
+          if item.start_with? 'regex:'
+            regex = item['regex:'.length..-1]
+            is_content_page = true if ref_uri.to_s[/#{regex}/i]
+          else
+            content_uri = @home_uri.merge item
+            is_content_page = true if ref_uri == content_uri
+          end
         end
       end
 
-      if is_page || File.exists?(save_as)   # TODO: use in-memory cache?
+      if is_content_page || File.exists?(save_as)   # TODO: use in-memory cache?
         @logger.log "        Skip: #{save_as}"
       else
         @logger.log "          As: #{save_as}"
