@@ -17,12 +17,15 @@
 
   "content_to_save": [
     "regex:^{{home_page}}",
+    "regex:^http://pics.livejournal.com/{{username}}",
     "http://www.livejournal.com/manage/settings/",
-    "http://www.livejournal.com/tools/memories.bml?user={{username}}"
+    "http://www.livejournal.com/todo/",
+    "regex:^http://www.livejournal.com/editjournal.bml",
+    "regex:^http://www.livejournal.com/tools/memories.bml"
   ],
 
   "content_to_exclude": [
     "/friends/",
-    "regex:/\\d+.html?mode=reply#add_comment"
+    "regex:/\\d+.html\\?mode=reply#add_comment"
   ]
 }

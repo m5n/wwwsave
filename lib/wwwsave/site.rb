@@ -130,6 +130,7 @@ module WWWSave
     # page references found in `page_queue`.
     def save_page(uri, page_queue, uri_to_get_instead=nil)
       @page_uri = uri
+      @home_uri = uri if @home_uri.nil?   # If just a single page is retrieved.
 
       path = local_path @page_uri, @options.output_dir
 
@@ -140,13 +141,16 @@ module WWWSave
 
       begin
         page = get_page uri_to_get_instead.nil? ? @page_uri : uri_to_get_instead
-        process_content page
+        process_content page, path
 
         # Change links to pages that will be saved to local copies and find
         # more pages to save.
         if !@options.has_url?
           page.search('a[href]').each do |item|
             orig_href = item['href']
+
+            # Skip empty URLs.
+            next if orig_href == ""
 
             # Don't break on invalid URLs, e.g. "http://ex*mple.com".
             begin
@@ -185,11 +189,7 @@ module WWWSave
 
               if match
                 save_as = local_path orig_uri, @options.output_dir
-
-                # TODO: hack alert: length + 1 and [0..-2]... another way?
-                save_as_level = @page_uri.path.split('/').length + 1
-                item['href'] = level_prefix(save_as_level)[0..-2] + save_as
-                item['href'] = '../' + item['href'] if save_as_level == 1
+                item['href'] = html_ref path, save_as
 
                 # Items that are not regex'es were already added to page_queue
                 # by Main, so only regex'es need to be inspected here.
@@ -201,6 +201,7 @@ module WWWSave
                   @logger.log "        URI: #{orig_uri}"
                   @logger.log "         As: #{save_as}"
                   @logger.log "       HTML: #{item['href']}"
+                  @logger.log "   (In path: #{path})"
 
                   page_queue.push orig_uri
                 end
@@ -226,11 +227,7 @@ module WWWSave
                 # TODO: not DRY (see above)--hard because add-to-queue needs
                 #       tmp vars.
                 save_as = local_path orig_uri, @options.output_dir
-
-                # TODO: hack alert: length + 1 and [0..-2]... another way?
-                save_as_level = @page_uri.path.split('/').length + 1
-                item['href'] = level_prefix(save_as_level)[0..-2] + save_as
-                item['href'] = '../' + item['href'] if save_as_level == 1
+                item['href'] = html_ref path, save_as
 
                 # No pages or regex'es of this list option has been added yet,
                 # so unlike above, don't inspect just regex'es here.
@@ -241,6 +238,7 @@ module WWWSave
                   @logger.log "        URI: #{orig_uri}"
                   @logger.log "         As: #{save_as}"
                   @logger.log "       HTML: #{item['href']}"
+                  @logger.log "   (In path: #{path})"
 
                   page_queue.push orig_uri
                 end
@@ -331,11 +329,11 @@ module WWWSave
       Nokogiri::HTML @browser.html
     end
 
-    def process_content(page)
-      save_as_level = @page_uri.path.split('/').length - 1
+    def process_content(page, path)
+      save_as_level = path.split('/').length - 1   # #dirs to root
 
       page.search('[style]').each do |item|
-        item['style'] = process_css item['style'], @page_uri, save_as_level
+        item['style'] = process_css item['style'], @page_uri, path, save_as_level
       end
 
       page.search('link[href], img[src], script[src], iframe[src]').each do |item|
@@ -348,9 +346,9 @@ module WWWSave
           @logger.log "Save content: #{url}"
           @logger.log "         URI: #{ref_uri}"
 
-          new_ref = save_resource ref_uri, save_as_level
-          new_ref = level_prefix(save_as_level) + new_ref
+          new_ref = save_resource ref_uri, path, save_as_level, item['rel'] == 'styleseet' ? 'css' : 'html'   # TODO: ext could also be js!
           @logger.log "        HTML: #{new_ref}"
+          @logger.log "    (In path: #{path} (level: #{save_as_level}))"
 
           # Change reference to resource in page.
           item['src'] ? item['src'] = new_ref : item['href'] = new_ref
@@ -362,8 +360,8 @@ module WWWSave
       end
     end
 
-    def process_css(content, ref_uri, save_as_level=0, ref_level=0)
-      matches = content.scan /url\s*\(['"]?(.+?)['"]?\)/i
+    def process_css(content, ref_uri, ref_path, save_as_level=0, ref_level=0)
+      matches = content.scan /url\s*\(\s*['"]?(.+?)['"]?\s*\)/i
       matches.map! { |m| m = m[0] }
       matches.uniq.each do |m|
         next if !m[/^[h\/]/i]   # Skip relative URLs or data blocks.
@@ -373,9 +371,9 @@ module WWWSave
           @logger.log "Save CSS ref: #{m}"
           @logger.log "         URI: #{uri}"
 
-          new_ref = save_resource uri, save_as_level
-          new_ref = level_prefix(ref_level) + new_ref
+          new_ref = save_resource uri, ref_path, save_as_level, 'css'
           @logger.log "        HTML: #{new_ref}"
+          @logger.log "    (In path: #{ref_path})"
 
           content.gsub! m, new_ref
         rescue Exception => error   # TODO: something more specific?
@@ -388,9 +386,9 @@ module WWWSave
       content
     end
 
-    def save_resource(ref_uri, save_as_level=0)
-      save_as = local_path ref_uri, @options.output_dir
-      new_ref = local_path ref_uri, '.'
+    def save_resource(ref_uri, in_path, save_as_level=0, ext='html')
+      save_as = local_path ref_uri, @options.output_dir, ext
+      new_ref = html_ref in_path, save_as
 
       # Don't save pages as resources.
       is_content_page = false
@@ -440,8 +438,9 @@ module WWWSave
 
             # TODO: any other extensions? Check something else instead?
             if uri.path.end_with? ".css"
-              ref_level = uri.path.split('/').length - 1
-              content = process_css content, uri, save_as_level, ref_level
+              ref_path = local_path uri, @options.output_dir, 'css'
+              ref_level = ref_path.split('/').length - 1   # #dirs to root
+              content = process_css content, uri, ref_path, save_as_level, ref_level
             end
 
             f.write content
@@ -473,12 +472,18 @@ module WWWSave
       result
     end
 
-    def local_path(uri, prefix)
+    def local_path(uri, prefix, ext='html')
       clone = URI.parse uri.to_s
       clone.scheme = @page_uri.scheme   # Avoid port mismatch due to scheme.
-      clone.query = clone.fragment = nil   # Avoid special chars in file names.
+      clone.fragment = nil   # Don't make anchor part of file name.
 
-      if "#{clone.host}:#{clone.port}" == "#{@page_uri.host}:#{@page_uri.port}"
+      if clone.query
+        # Since the query string is made part of the file name (see below),
+        # make sure there are no directory separators in it.
+        clone.query = clone.query.gsub '/', '_S_'
+      end
+
+      if "#{clone.host}:#{clone.port}" == "#{@home_uri.host}:#{@home_uri.port}"
         clone.scheme = clone.host = clone.port = nil
         path = clone.to_s
         path = '/' if path.empty?
@@ -487,9 +492,26 @@ module WWWSave
         path = clone.to_s[1..-1]   # Avoid path starting with "//".
       end
 
+      # Some sites use dynamic concatenation of files by requesting them via
+      # the query string, e.g.:
+      # http://l-stat.livejournal.net/??lj_base.css,controlstrip-new.css,widgets/calendar.css,widgets/filter-settings.css,popup/popupus.css,popup/popupus-blue.css,lj_base-journal.css,journalpromo/journalpromo_v3.css?v=1417182868
+      # So don't chop off the query string, keep it as part of the file name.
+      path.gsub! '?', '_Q_'
+
+      # Make sure there's a '/' between prefix and path.
+      path = '/' + path if prefix[-1] != '/' && path[0] != '/'
+
       path = "#{prefix}#{path}"
-      path += 'index.html' if path[-1] == '/'
-      path   # Needed because of if condition above!
+      path += "index.#{ext}" if path[-1] == '/'
+
+      # Avoid file names getting too long; usually systems have 255 chars max.
+      path.split('/').map { |p| p[0..254] }.join '/'
+    end
+
+    def html_ref(in_path, save_as)
+      save_as_level = in_path.split('/').length - 1   # #dirs to root
+      ref = level_prefix(save_as_level)[0..-2] + save_as   # Remove trailing '.'
+      ref = '../' + ref
     end
   end
 end
