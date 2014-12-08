@@ -330,10 +330,8 @@ module WWWSave
     end
 
     def process_content(page, path)
-      save_as_level = path.split('/').length - 1   # #dirs to root
-
       page.search('[style]').each do |item|
-        item['style'] = process_css item['style'], @page_uri, path, save_as_level
+        item['style'] = process_css item['style'], @page_uri, path
       end
 
       page.search('link[href], img[src], script[src], iframe[src]').each do |item|
@@ -346,9 +344,9 @@ module WWWSave
           @logger.log "Save content: #{url}"
           @logger.log "         URI: #{ref_uri}"
 
-          new_ref = save_resource ref_uri, path, save_as_level, item['rel'] == 'styleseet' ? 'css' : 'html'   # TODO: ext could also be js!
+          new_ref = save_resource ref_uri, path, item['rel'] == 'styleseet' ? 'css' : 'html'   # TODO: ext could also be js!
           @logger.log "        HTML: #{new_ref}"
-          @logger.log "    (In path: #{path} (level: #{save_as_level}))"
+          @logger.log "    (In path: #{path})"
 
           # Change reference to resource in page.
           item['src'] ? item['src'] = new_ref : item['href'] = new_ref
@@ -360,7 +358,7 @@ module WWWSave
       end
     end
 
-    def process_css(content, ref_uri, ref_path, save_as_level=0, ref_level=0)
+    def process_css(content, ref_uri, ref_path)
       matches = content.scan /url\s*\(\s*['"]?(.+?)['"]?\s*\)/i
       matches.map! { |m| m = m[0] }
       matches.uniq.each do |m|
@@ -371,7 +369,7 @@ module WWWSave
           @logger.log "Save CSS ref: #{m}"
           @logger.log "         URI: #{uri}"
 
-          new_ref = save_resource uri, ref_path, save_as_level, 'css'
+          new_ref = save_resource uri, ref_path, 'css'
           @logger.log "        HTML: #{new_ref}"
           @logger.log "    (In path: #{ref_path})"
 
@@ -386,7 +384,7 @@ module WWWSave
       content
     end
 
-    def save_resource(ref_uri, in_path, save_as_level=0, ext='html')
+    def save_resource(ref_uri, in_path, ext='html')
       save_as = local_path ref_uri, @options.output_dir, ext
       new_ref = html_ref in_path, save_as
 
@@ -420,13 +418,13 @@ module WWWSave
       else
         @logger.log "          As: #{save_as}"
 
-        process_resource ref_uri, save_as, save_as_level
+        process_resource ref_uri, save_as
       end
 
       new_ref
     end
 
-    def process_resource(uri, save_as, save_as_level)
+    def process_resource(uri, save_as)
       request = Typhoeus::Request.new(uri.to_s)
 
       request.on_complete do |response|
@@ -439,8 +437,7 @@ module WWWSave
             # TODO: any other extensions? Check something else instead?
             if uri.path.end_with? ".css"
               ref_path = local_path uri, @options.output_dir, 'css'
-              ref_level = ref_path.split('/').length - 1   # #dirs to root
-              content = process_css content, uri, ref_path, save_as_level, ref_level
+              content = process_css content, uri, ref_path
             end
 
             f.write content
@@ -480,7 +477,7 @@ module WWWSave
       if clone.query
         # Since the query string is made part of the file name (see below),
         # make sure there are no directory separators in it.
-        clone.query = clone.query.gsub '/', '_S_'
+        clone.query = clone.query.gsub('/', '_S_')
       end
 
       if "#{clone.host}:#{clone.port}" == "#{@home_uri.host}:#{@home_uri.port}"
@@ -497,6 +494,9 @@ module WWWSave
       # http://l-stat.livejournal.net/??lj_base.css,controlstrip-new.css,widgets/calendar.css,widgets/filter-settings.css,popup/popupus.css,popup/popupus-blue.css,lj_base-journal.css,journalpromo/journalpromo_v3.css?v=1417182868
       # So don't chop off the query string, keep it as part of the file name.
       path.gsub! '?', '_Q_'
+
+      # Escaped chars could cause trouble, e.g. %20, which is turned into space.
+      path.gsub! '%', '_P_'
 
       # Make sure there's a '/' between prefix and path.
       path = '/' + path if prefix[-1] != '/' && path[0] != '/'
