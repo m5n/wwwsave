@@ -20,7 +20,7 @@
     "regex:^http://pics.livejournal.com/{{username}}",
     "http://www.livejournal.com/manage/settings/",
     "http://www.livejournal.com/todo/",
-    "regex:^http://www.livejournal.com/editjournal.bml",
+    "regex:^http://www.livejournal.com/editjournal.bml\\?journal={{username}}",
     "regex:^http://www.livejournal.com/tools/memories.bml"
   ],
 

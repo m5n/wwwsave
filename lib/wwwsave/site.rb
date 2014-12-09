@@ -224,8 +224,6 @@ module WWWSave
               end
 
               if match
-                # TODO: not DRY (see above)--hard because add-to-queue needs
-                #       tmp vars.
                 save_as = local_path orig_uri, @options.output_dir
                 item['href'] = html_ref path, save_as
 
@@ -276,6 +274,8 @@ module WWWSave
     def get_page(uri)
       @logger.log "Retrieving: #{uri}"
       @browser.goto uri.to_s if @browser.url != uri.to_s
+      @logger.log "Landed on: #{@browser.url}"
+      @page_uri = URI.parse @browser.url
 
       if @options.has_click_if_present_on_paths_selector?
         begin
@@ -330,6 +330,12 @@ module WWWSave
     end
 
     def process_content(page, path)
+      # Process in-page style blocks.
+      page.search('style').each do |item|
+        item.content = process_css item.content, @page_uri, path
+      end
+
+      # Process inline styles.
       page.search('[style]').each do |item|
         item['style'] = process_css item['style'], @page_uri, path
       end
@@ -362,7 +368,7 @@ module WWWSave
       matches = content.scan /url\s*\(\s*['"]?(.+?)['"]?\s*\)/i
       matches.map! { |m| m = m[0] }
       matches.uniq.each do |m|
-        next if !m[/^[h\/]/i]   # Skip relative URLs or data blocks.
+        next if !m[/^[h\/]/i]   # Skip paths not starting with / or data blocks.
 
         begin
           uri = ref_uri.merge m
@@ -425,7 +431,7 @@ module WWWSave
     end
 
     def process_resource(uri, save_as)
-      request = Typhoeus::Request.new(uri.to_s)
+      request = Typhoeus::Request.new(uri.to_s, followlocation: true)
 
       request.on_complete do |response|
         begin
