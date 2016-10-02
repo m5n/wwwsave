@@ -6,39 +6,44 @@ Usage
 Usage: wwwsave [options]
 
 Options:
-	--agent ua	User agent to load pages as
-				(default: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 SlimerJS/0.10.0)
-	-f		Force appending data to existing output directory
-				(will add new files, not refresh existing ones)
-	-h		Show this message
-	-o dir		Directory to save pages to
-				(default: "wwwsave-<site>")
-	-p pwd		Password for login
-	-r		Resume interrupted save
-	-s site		Enable login & personal content discovery
-				(see below for supported sites)
-	-u name		Username for login
-	--url url	Single page to save
-				(use -s to save an entire site)
-	-v		Run verbosely
-				(default: false)
-	--version	Show version
-	--view size	Browser viewport resolution in pixels (format: wxh)
-				(default: 1280x1024)
+
+    --agent ua     User agent to load pages as
+                       (default: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 SlimerJS/0.10.0)
+    -f             Force appending data to existing output directory
+                       (will add new files, not refresh existing ones)
+    -h             Show this message
+    -o dir         Directory to save pages to
+                       (default: "wwwsave-<site>")
+    -p pwd         Password for login
+    -r             Resume interrupted save
+    -s site        Enable login & personal content discovery
+                       (see below for supported sites)
+    -u name        Username for login
+    --url url      Single page to save
+                       (use -s to save an entire site)
+    -v             Run verbosely
+                       (default: false)
+    --version      Show version
+    --view size    Browser viewport resolution in pixels (format: wxh)
+                       (default: 1280x1024)
 
 To save a single public page:
-	$ wwwsave --url http://www.example.com
-	$ wwwsave --url http://www.example.com/path/to/page.html
+
+    $ wwwsave --url http://www.example.com
+    $ wwwsave --url http://www.example.com/path/to/page.html
 
 To save all personal content on a site requiring login:
-	$ wwwsave -s site -u myname -p '$3cr3t'
+
+    $ wwwsave -s site -u myname -p '$3cr3t'
 
 To save a single page on a site requiring login:
-	$ wwwsave -s site -u myname -p '$3cr3t' --url http://myname.example.com
+
+    $ wwwsave -s site -u myname -p '$3cr3t' --url http://myname.example.com
 
 The following sites are supported for use with the -s option:
-	livejournal
-	pinterest
+
+* livejournal
+* pinterest
 
 
 Adding authentication for other sites
@@ -64,4 +69,4 @@ Developer setup
 1. Do any additonal Slimer setup, if needed: http://docs.slimerjs.org/current/installation.html#setup
 1. Show the usage:
 
-    $ wwwsave -h
+    $ ./wwwsave -h

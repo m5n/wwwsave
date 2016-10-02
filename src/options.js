@@ -160,59 +160,72 @@
         var command = module.exports.command;
         var page = require('webpage').create();
 
+        var padding = "               ";
         var output = "Usage: " + command + " [options]\n";
 
-        output += "\nOptions:\n";
+        output += "\nOptions:\n\n";
 
-        output += "\t--agent ua\tUser agent to load pages as\n";
-        output += "\t\t\t\t(default: " + page.settings.userAgent + ")\n";
+        var oo = "--agent ua";
+        output += "    " + oo + padding.substring(oo.length) + "User agent to load pages as\n";
+        output += "    " + padding + "    " + "(default: " + page.settings.userAgent + ")\n";
 
-        output += "\t-f\t\tForce appending data to existing output directory\n";
-        output += "\t\t\t\t(will add new files, not refresh existing ones)\n";
+        oo = "-f";
+        output += "    " + oo + padding.substring(oo.length) + "Force appending data to existing output directory\n";
+        output += "    " + padding + "    " + "(will add new files, not refresh existing ones)\n";
 
-        output += "\t-h\t\tShow this message\n";
+        oo = "-h";
+        output += "    " + oo + padding.substring(oo.length) + "Show this message\n";
 
-        output += "\t-o dir\t\tDirectory to save pages to\n";
-        output += "\t\t\t\t(default: \"" + module.exports.command + "-<site>\")\n";
+        oo = "-o dir";
+        output += "    " + oo + padding.substring(oo.length) + "Directory to save pages to\n";
+        output += "    " + padding + "    " + "(default: \"" + module.exports.command + "-<site>\")\n";
 
-        output += "\t-p pwd\t\tPassword for login\n";
+        oo = "-p pwd";
+        output += "    " + oo + padding.substring(oo.length) + "Password for login\n";
 
-        output += "\t-r\t\tResume interrupted save\n";
+        oo = "-r";
+        output += "    " + oo + padding.substring(oo.length) + "Resume interrupted save\n";
 
-        output += "\t-s site\t\tEnable login & personal content discovery\n";
-        output += "\t\t\t\t(see below for supported sites)\n";
+        oo = "-s site";
+        output += "    " + oo + padding.substring(oo.length) + "Enable login & personal content discovery\n";
+        output += "    " + padding + "    " + "(see below for supported sites)\n";
 
-        output += "\t-u name\t\tUsername for login\n";
+        oo = "-u name";
+        output += "    " + oo + padding.substring(oo.length) + "Username for login\n";
 
-        output += "\t--url url\tSingle page to save\n";
-        output += "\t\t\t\t(use -s to save an entire site)\n";
+        oo = "--url url";
+        output += "    " + oo + padding.substring(oo.length) + "Single page to save\n";
+        output += "    " + padding + "    " + "(use -s to save an entire site)\n";
 
-        output += "\t-v\t\tRun verbosely\n";
-        output += "\t\t\t\t(default: false)\n";
+        oo = "-v";
+        output += "    " + oo + padding.substring(oo.length) + "Run verbosely\n";
+        output += "    " + padding + "    " + "(default: false)\n";
 
-        output += "\t--version\tShow version\n";
+        oo = "--version";
+        output += "    " + oo + padding.substring(oo.length) + "Show version\n";
 
-        output += "\t--view size\tBrowser viewport resolution in pixels (format: wxh)\n";
-        output += "\t\t\t\t(default: " + defaultViewportSize + ")\n";
+        oo = "--view size";
+        output += "    " + oo + padding.substring(oo.length) + "Browser viewport resolution in pixels (format: wxh)\n";
+        output += "    " + padding + "    " + "(default: " + defaultViewportSize + ")\n";
 
-        output += "\nTo save a single public page:\n";
-        output += "\t$ " + command + " --url http://www.example.com\n";
-        output += "\t$ " + command + " --url http://www.example.com/path/to/page.html\n";
+        output += "\nTo save a single public page:\n\n";
+        output += "    $ " + command + " --url http://www.example.com\n";
+        output += "    $ " + command + " --url http://www.example.com/path/to/page.html\n";
 
         // TODO:
-        //output += "\nTo save all personal content on a site requiring login (prompts for password):\n";
-        //output += "\t$ " + command + " -s site -u myname\n";
+        //output += "\nTo save all personal content on a site requiring login (prompts for password):\n\n";
+        //output += "    $ " + command + " -s site -u myname\n";
 
-        //output += "\nTo automate login (exposes plaintext password):\n";
-        output += "\nTo save all personal content on a site requiring login:\n";
-        output += "\t$ " + command + " -s site -u myname -p '$3cr3t'\n";
+        //output += "\nTo automate login (exposes plaintext password):\n\n";
+        output += "\nTo save all personal content on a site requiring login:\n\n";
+        output += "    $ " + command + " -s site -u myname -p '$3cr3t'\n";
 
-        output += "\nTo save a single page on a site requiring login:\n";
-        output += "\t$ " + command + " -s site -u myname -p '$3cr3t' --url http://myname.example.com\n";
+        output += "\nTo save a single page on a site requiring login:\n\n";
+        output += "    $ " + command + " -s site -u myname -p '$3cr3t' --url http://myname.example.com\n";
 
-        output += "\nThe following sites are supported for use with the -s option:\n";
+        output += "\nThe following sites are supported for use with the -s option:\n\n";
         supportedSites.forEach(function (site) {
-            output += "\t" + site + "\n";
+            output += "* " + site + "\n";
         });
         output += "\nSee https://github.com/m5n/wwwsave for adding support for different sites";
 
