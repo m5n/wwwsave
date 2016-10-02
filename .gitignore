@@ -1,3 +1,5 @@
-.ruby-*
 wwwsave-*
 test_*.sh
+slimerjs*
+phantomjs-*
+failed.png

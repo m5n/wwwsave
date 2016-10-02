@@ -5,33 +5,36 @@
   "login_form_username_field_name": "username_or_email",
   "login_form_password_field_name": "password",
   "login_form_submit_button_selector": "button[type='submit']",
+  "login_form_submit_via_button": true,
 
-  "login_success_element_selector": ".RightHeader",
-  "login_error_text_selector": ".loginError p",
+  "login_success_element_selector": ".UserNavigateButton",
+  "login_error_text_selector": ".loginError #errorMessage",
 
 
 
-  "actual_username_regex": "P.start.start\\(.*?\"username\":\\s+\"(.+?)\"",
+  "logout_link_selector": "[href=\"/logout/\"]",
 
-  "home_page": "http://www.pinterest.com/{{username}}/",
+
+
+  "homepage_link_selector": ".usernameLink",
+  "username_in_homepage_url_regex": "\/([^/]+)\/?$",
 
 
 
   "click_if_present_on_paths_selector": ".Modal.show .Button.primary",
-
   "lazy_load_on_paths": true,
 
 
 
   "content_to_save": [
     "regex:^{{home_page}}",
-    "/settings/"
+    "{{home_page}}/settings/"
   ],
 
   "content_to_exclude": [
-    "/{{username}}/pins/",
-    "/{{username}}/followers/",
-    "/{{username}}/following/"
+    "{{home_page}}/pins/",
+    "{{home_page}}/followers/",
+    "{{home_page}}/following/"
   ],
 
   "content_to_save_only_if_linked_from_other_content": [

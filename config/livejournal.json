@@ -5,13 +5,19 @@
   "login_form_username_field_name": "user",
   "login_form_password_field_name": "password",
   "login_form_submit_button_selector": "button[name='action:login']",
+  "login_form_submit_via_button": false,
 
-  "login_success_element_selector": "button.b-flatbutton-red",
+  "login_success_element_selector": ".s-header-item__link--user",
   "login_error_text_selector": ".b-bubble-warning ul li",
 
 
 
-  "home_page": "http://{{username}}.livejournal.com",
+  "logout_link_selector": ".s-header-sub-list-item__link--logout",
+
+
+
+  "homepage_link_selector": ".s-header-item__link--user",
+  "username_in_homepage_url_regex": "\/([^/.]+)",
 
 
 
@@ -27,5 +33,8 @@
   "content_to_exclude": [
     "/friends/",
     "regex:/\\d+.html\\?mode=reply#add_comment"
+  ],
+
+  "content_to_save_only_if_linked_from_other_content": [
   ]
 }

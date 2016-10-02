@@ -1,4 +1,26 @@
-#!/usr/bin/ruby
+#!/bin/sh
 
-ENV['RUBYLIB'] = 'lib'
-system "bin/wwwsave '#{ARGV.join "' '"}'"
+# TODO: make wwwsave.bat
+
+# The SQL files are generated via Perl, so make sure it's installed.
+SLIMER=`which slimerjs`
+if [ "$SLIMER" = "" ]; then
+    echo "Install SlimerJS and/or make it available in \$PATH"
+    exit 1
+fi
+
+# Options for wwwsave may be the same as options for the automation framework
+# (e.g. -h or -v) so make all options unique.
+OPTIONS=""
+for ARG in $@; do
+    PREFIX=$(echo "$ARG" | awk '{print substr($1, 0, 1)}')
+    if [ "$PREFIX" = "-" ]; then
+        OPTIONS="$OPTIONS wwwsave$ARG"
+    else
+        OPTIONS="$OPTIONS $ARG"
+    fi
+done
+
+CMD="slimerjs src/wwwsave.js$OPTIONS"
+$CMD
+
