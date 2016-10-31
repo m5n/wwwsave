@@ -3,7 +3,7 @@ wwwsave
 
 Usage
 -----
-Usage: wwwsave [options]
+Usage: ./wwwsave [options]
 
 Options:
 
@@ -29,16 +29,16 @@ Options:
 
 To save a single public page:
 
-    $ wwwsave --url http://www.example.com
-    $ wwwsave --url http://www.example.com/path/to/page.html
+    $ ./wwwsave --url http://www.example.com
+    $ ./wwwsave --url http://www.example.com/path/to/page.html
 
 To save all personal content on a site requiring login:
 
-    $ wwwsave -s site -u myname -p '$3cr3t'
+    $ ./wwwsave -s site -u myname -p '$3cr3t'
 
 To save a single page on a site requiring login:
 
-    $ wwwsave -s site -u myname -p '$3cr3t' --url http://myname.example.com
+    $ ./wwwsave -s site -u myname -p '$3cr3t' --url http://myname.example.com
 
 The following sites are supported for use with the -s option:
 
