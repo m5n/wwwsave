@@ -1,4 +1,4 @@
-/*jslint node: true */
+/*jslint node */
 (function () {
     "use strict";
 
@@ -12,7 +12,7 @@
         console.error.apply(console, arguments);
     }
 
-    function log() {
+    function info() {
         console.info.apply(console, arguments);
     }
 
@@ -25,7 +25,7 @@
     module.exports = {
         debug: debug,
         error: error,
-        init: init,
-        log: log
+        info: info,
+        init: init
     };
 }());
