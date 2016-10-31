@@ -1,4 +1,4 @@
-/*jslint node: true */
+/*jslint node */
 (function () {
     "use strict";
 
@@ -140,7 +140,7 @@
             if (module.exports.siteId) {
                 module.exports.outputDir += "-" + module.exports.siteId;
             } else if (module.exports.url) {
-                /.+:\/\/(.+)\/?/.test(module.exports.url);
+                (/.+:\/\/(.+)\/?/).test(module.exports.url);
                 module.exports.outputDir += "-" + RegExp.$1;
             } else {
                 module.exports.outputDir += "-" + (new Date()).toISOString();
@@ -158,7 +158,7 @@
         }
 
         var command = module.exports.command;
-        var page = require('webpage').create();
+        var page = require("webpage").create();
 
         var padding = "               ";
         var output = "Usage: " + command + " [options]\n";

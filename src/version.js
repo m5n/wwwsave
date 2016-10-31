@@ -1,4 +1,4 @@
-/*jslint node: true */
+/*jslint node */
 (function () {
     "use strict";
 
