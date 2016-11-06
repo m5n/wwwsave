@@ -10,10 +10,10 @@ Options:
     --agent ua     User agent to load pages as
                        (default: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 SlimerJS/0.10.0)
     -f             Force appending data to existing output directory
-                       (will add new files, not refresh existing ones)
+                       (will add new files but not update existing files)
     -h             Show this message
     -o dir         Directory to save pages to
-                       (default: "wwwsave-<site>")
+                       (default: "./wwwsave-<site>")
     -p pwd         Password for login
     -r             Resume interrupted save
     -s site        Enable login & personal content discovery
@@ -44,6 +44,18 @@ The following sites are supported for use with the -s option:
 
 * livejournal
 * pinterest
+
+To view the downloaded content:
+
+* Load <output directory>/index.html in your browser
+* Start a local web server in the <output directory> and load its default URL in your browser, e.g.
+
+    $ cd <output directory>
+    $ python -m SimpleHTTPServer 8000
+    (Load http://localhost:8000 in your browser.)
+
+Because browsers employ various security measures, accessing content even from your own machine may not be allowed.
+The second option above will have the best results and does not require any changes to your browser settings.
 
 
 Adding authentication for other sites
