@@ -107,7 +107,7 @@
                 if (options.siteId) {
                     suffix = options.siteId;
                 } else if (options.url) {
-                    (/.+:\/\/(.+)\/?/).test(options.url);
+                    (/^.+:\/\/([^\/]+)/).test(options.url);
                     suffix = RegExp.$1;
                 }
                 options.outputDir += "-" + suffix;
@@ -118,6 +118,7 @@
             scraper.addIntermediateStep("Make sure output directory does not already exist", function () {
                 if (fs.exists(options.outputDir)) {
                     return "Output directory exists (use -f option to append data)";
+                    // TODO: this ends up taking a screenshot... avoid that
                 }
             });
         }

@@ -80,10 +80,7 @@
             } else if (url.startsWith("/")) {
                 // Add base URL
                 logger.debug("Add base URL from", templateUrl, "to", url);
-                if (templateUrl.split("/").length === 3) {
-                    url = templateUrl + url;
-                    logger.debug("Base URL:", templateUrl);
-                } else if ((/^(.+:\/\/.+)\//).test(templateUrl)) {
+                if ((/^(.+:\/\/[^\/]+)/).test(templateUrl)) {
                     var baseUrl = RegExp.$1;
                     url = baseUrl + url;
                     logger.debug("Base URL:", baseUrl);
@@ -167,6 +164,7 @@
         fs.makeTree(dirs.join("/"));
         fs.write(path, data, "wb");
     /*
+        // TODO: use this if using phantomjs instead of slimerjs
         fs.access(path, fs.F_OK | fs.W_OK, function (err) {
             logger.debug('fs.access callback');
             if (err) {
@@ -533,13 +531,6 @@
                         }
 
                         saveFile(path, body);
-
-                        if (response.url === options.url || response.url === options.home_page) {
-                            // Save extra copy in the backup root directory for easy access
-                            var path = options.outputDir + "/index.html";
-                            logger.debug("    Save page:", path);
-                            saveFile(path, processHtml(page.content, path, options));
-                        }
                     }
                 };
 
@@ -868,27 +859,17 @@
         });
     }
 
-    function levelPrefix(level) {
-        var result = "";
-
-        var first = true;
-        for (var ii = 0; ii < level; ii += 1) {
-            if (first) {
-                result = "." + result;
-                first = false;
-            } else {
-                result = "../" + result;
-            }
-        }
-        return result;
-    }
-
     function htmlRef(inPath, saveAs) {
+        // Remove options.outputDir as HTML refs should be relative to outputDir
+        inPath = inPath.replace((/^.+?\//), "");
+        saveAs = saveAs.replace((/^.+?\//), "");
+
+        var ref = saveAs;
         var saveAsLevel = inPath.split("/").length - 1;   // #dirs to root
-        var ref = levelPrefix(saveAsLevel);
-        ref = ref.substring(0, ref.length - 1);   // Remove trailing '.'
-        ref = ref + saveAs;
-        ref = "../" + ref;
+        for (var ii = 0; ii < saveAsLevel; ii += 1) {
+            ref = "../" + ref;
+        }
+
         return ref;
     }
 
@@ -1118,16 +1099,19 @@
     function addLoadPageSteps(url, method, desc) {
         method = method || "push";
         desc = desc || url;
+        var firstTime = true;
 
         // Since arguments are used later in time, tie them to this step via a closure
         (function (pageUrl, method, desc) {
             queue[method]({
                 desc: "Load " + desc,
                 fn: function (options) {
-                    if (pageUrl === page.url) {
+                    // (Re-)load page if this is the first time here; onResourceReceived was not in effect before now
+                    if (pageUrl === page.url && !firstTime) {
                         logger.info("Already loaded", pageUrl);
                         return { result: true };
                     } else {
+                        firstTime = false;
                         page.open(pageUrl);
 
                         // To avoid rate limiting, delay fetching next page.
