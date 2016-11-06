@@ -31,7 +31,7 @@
   ],
 
   "content_to_exclude": [
-    "/friends/",
+    "{{home_page}}/friends/",
     "regex:/\\d+.html\\?mode=reply#add_comment"
   ],
 
