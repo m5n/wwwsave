@@ -146,7 +146,7 @@
             throw "Must call parse() first";
         }
 
-        var command = module.exports.command;
+        var command = "./" + module.exports.command;
         var page = require("webpage").create();
 
         var padding = "               ";
@@ -167,7 +167,7 @@
 
         oo = "-o dir";
         output += "    " + oo + padding.substring(oo.length) + "Directory to save pages to\n";
-        output += "    " + padding + "    " + "(default: \"" + module.exports.command + "-<site>\")\n";
+        output += "    " + padding + "    " + "(default: \"" + command + "-<site>\")\n";
 
         oo = "-p pwd";
         output += "    " + oo + padding.substring(oo.length) + "Password for login\n";
