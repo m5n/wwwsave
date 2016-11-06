@@ -6,7 +6,7 @@
     var logger = require("./logger");
     var page = require("webpage").create();
 
-    // Number of seconds to wait before fetching next page
+    // Number of milliseconds to wait before fetching next page
     var NEXT_PAGE_DELAY = 2000;
 
     var captureAllPagesInSite = false;
@@ -15,7 +15,9 @@
     var loadInProgress = false;
     var resumeFilename = ".pending";
     var startTime;
-    var queue = [];
+    var queue = [];   // Contains steps to be taken still
+    var extensionLookup = {};   // Contains extensions for certain received resources
+                                // (Needed because content type is not known when processing <img> src's for example)
 
     function init(options) {
         logger.init(options);
@@ -96,8 +98,6 @@
     }
 
     function urlToPath(url, prefix, ext) {
-        ext = ext || "html";
-
         var result = url;
         var qs;
 
@@ -142,6 +142,13 @@
         // Make sure there's a filename
         if (path.charAt(path.length - 1) == "/") {
             path += "index." + ext;
+            extensionLookup[url] = ext;
+        }
+
+        // Make sure there's an extension (SVGs won't render without it)
+        if (!(/\.[^./]+$/).test(path)) {
+            path += "." + ext;
+            extensionLookup[url] = ext;
         }
 
         // Avoid file names getting too long; usually systems have 255 chars max
@@ -500,37 +507,50 @@
         queue.push({
             desc: "Pre-save page setup",
             fn: function (options) {
-                page.captureContent = [ /css/, /font/, /image/ ];
+                page.captureContent = [ /css/, /font/, /html/, /image/, /javascript/ ];
                 page.onResourceReceived = function (response) {
                     if (response.stage === "end" && response.status < 300 && response.body.length > 0) {
                         var body = response.body;
                         delete response.body;   // So it won't be outputted in the logger.debug below
                         logger.debug("Resource received:", response.url, JSON.stringify(response));
-                        logger.debug("Save resource: " + response.url);
 
-                        var isCss = response.url.endsWith(".css");
-                        var isHtml = response.url.endsWith(".html");
-                        if (!isCss || !isHtml) {
-                            response.headers.forEach(function (item) {
-                                if (item.name === "Content-Type") {
-                                    if (item.value.startsWith("text/css")) {
-                                        isCss = true;
-                                    } else if (item.value.startsWith("text/html")) {
-                                        isHtml = true;
-                                    }
+                        var ext;
+                        // SVGs don't load without a file extension...
+                        // map each of the captureContent items to an extension
+                        if ((/image\/(\w+)/).test(response.contentType)) {   // Image, even image/svg+xml
+                            ext = RegExp.$1 === "jpeg" ? "jpg" : RegExp.$1;
+                        } else if ((/text\/(\w+)/).test(response.contentType)) {   // CSS or HTML
+                            ext = RegExp.$1;
+                        } else if ((/javascript/).test(response.contentType)) {   // JS
+                            ext = "js";
+                        }
+                        // TODO: font
+
+                        var path = urlToPath(response.url, options.outputDir, ext);
+                        if (fs.exists(path)) {
+                            logger.debug("Already saved resource: " + response.url);
+                        } else {
+                            logger.debug("Save resource: " + response.url);
+
+                            var isCss = response.url.endsWith(".css");
+                            var isHtml = response.url.endsWith(".html");
+                            if (!isCss || !isHtml) {
+                                if (response.contentType.startsWith("text/css")) {
+                                    isCss = true;
+                                } else if (response.contentType.startsWith("text/html")) {
+                                    isHtml = true;
                                 }
-                            });
-                        }
-                        logger.debug("isCss", isCss, "isHtml", isHtml);
-                        var path = urlToPath(response.url, options.outputDir);
+                            }
+                            logger.debug("isCss", isCss, "isHtml", isHtml);
 
-                        if (isCss) {
-                            body = processCss(body, response.url, path, options);
-                        } else if (isHtml) {
-                            body = processHtml(body, path, options);
-                        }
+                            if (isCss) {
+                                body = processCss(body, response.url, path, options);
+                            } else if (isHtml) {
+                                body = processHtml(body, path, options);
+                            }
 
-                        saveFile(path, body);
+                            saveFile(path, body);
+                        }
                     }
                 };
 
@@ -565,6 +585,12 @@
             // TODO: don't break on invalid URLs, e.g. "http://ex*mple.com"
             href = mergeUrl(page.url, href);
             logger.debug("= URL \"" + href + "\"");
+
+            if (options.url) {
+                // Use full URLs wherever possible if user only saves a single page,
+                // so refresh default return value now that href may have changed
+                unprocessed = prefix + "\"" + href + "\"";
+            }
 
             // If this URL will not be saved, no need to process it either
             var isExcludePage = false;
@@ -614,7 +640,7 @@
                     }
 
                     if (match) {
-                        var saveAs = urlToPath(href, options.outputDir);
+                        var saveAs = urlToPath(href, options.outputDir, "html");
 
                         resultHref = htmlRef(path, saveAs);
 
@@ -674,7 +700,7 @@
                 }
 
                 if (match) {
-                    var saveAs = urlToPath(href, options.outputDir);
+                    var saveAs = urlToPath(href, options.outputDir, "html");
 
                     resultHref = htmlRef(path, saveAs);
 
@@ -732,7 +758,7 @@
         */
 
         logger.debug("Process stylesheet links...");
-        body = body.replace(/(<link[^>?]+href=)["']([^"']+)["']/g, function (match, prefix, href) {
+        body = body.replace(/(<link[^>]*\shref=)["']([^"']+)["']/g, function (match, prefix, href) {
             // TODO: refactor these repeated replacer functions
             var ext = "css";
             var url = mergeUrl(page.url, href);
@@ -747,9 +773,9 @@
         });
 
         logger.debug("Process image links...");
-        body = body.replace(/(<img[^>?]+src=)["']([^"']+)["']/g, function (match, prefix, src) {
-            var ext = "png";   // TODO: may not be correct!
+        body = body.replace(/(<img[^>]*\ssrc=)["']([^"']+)["']/g, function (match, prefix, src) {
             var url = mergeUrl(page.url, src);
+            var ext = extensionLookup[url] || "png";
             var saveAs = urlToPath(url, options.outputDir, ext);
             var newSrc = htmlRef(path, saveAs);
             logger.debug(" HTML link:", src);
@@ -761,7 +787,7 @@
         });
 
         logger.debug("Process JavaScript links...");
-        body = body.replace(/(<script[^>?]+src=)["']([^"']+)["']/g, function (match, prefix, src) {
+        body = body.replace(/(<script[^>]*\ssrc=)["']([^"']+)["']/g, function (match, prefix, src) {
             var ext = "js";
             var url = mergeUrl(page.url, src);
             var saveAs = urlToPath(url, options.outputDir, ext);
@@ -775,7 +801,7 @@
         });
 
         logger.debug("Process iframe links...");
-        body = body.replace(/(<iframe[^>?]+src=)["']([^"']+)["']/g, function (match, prefix, src) {
+        body = body.replace(/(<iframe[^>]*\ssrc=)["']([^"']+)["']/g, function (match, prefix, src) {
             var ext = "html";
             var url = mergeUrl(page.url, src);
             var saveAs = urlToPath(url, options.outputDir, ext);
@@ -932,7 +958,7 @@
                 pending: pageUrl,   // Add reference to URL so it can be found later
                 fn: function (options) {
                     // onResourceReceived also saves HTML (even though we don't ask for it), so make sure to overwrite anything that's there already
-                    var path = urlToPath(pageUrl, options.outputDir);
+                    var path = urlToPath(pageUrl, options.outputDir, "html");
 
                     logger.debug("    Save page:", path);
                     saveFile(path, processHtml(page.content, path, options));
