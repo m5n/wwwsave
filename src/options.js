@@ -134,22 +134,11 @@
             module.exports.loginRequired = true;
         }
 
-        if (!module.exports.outputDir) {
-            // Set default
-            module.exports.outputDir = module.exports.command;
-            if (module.exports.siteId) {
-                module.exports.outputDir += "-" + module.exports.siteId;
-            } else if (module.exports.url) {
-                (/.+:\/\/(.+)\/?/).test(module.exports.url);
-                module.exports.outputDir += "-" + RegExp.$1;
-            } else {
-                module.exports.outputDir += "-" + (new Date()).toISOString();
-            }
-        }
-
         if (!module.exports.viewportSize) {
             module.exports.viewportSize = defaultViewportSize;
         }
+
+        // Default outputDir is set by wwwsave.js
     }
 
     function usage() {
@@ -171,7 +160,7 @@
 
         oo = "-f";
         output += "    " + oo + padding.substring(oo.length) + "Force appending data to existing output directory\n";
-        output += "    " + padding + "    " + "(will add new files, not refresh existing ones)\n";
+        output += "    " + padding + "    " + "(will add new files but not update existing files)\n";
 
         oo = "-h";
         output += "    " + oo + padding.substring(oo.length) + "Show this message\n";

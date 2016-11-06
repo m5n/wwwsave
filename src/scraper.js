@@ -65,6 +65,39 @@
         }
     }
 
+    function mergeUrl(templateUrl, url) {
+        if (!url.startsWith("h")) {
+            if (url.startsWith("//")) {
+                // Add protocol
+                logger.debug("Add protocol from", templateUrl, "to", url);
+                if ((/^(.+)\/\//).test(templateUrl)) {
+                    var protocol = RegExp.$1;
+                    url = protocol + url;
+                    logger.debug("Protocol:", protocol);
+                } else {
+                    logger.error("Cannot extract protocol from \"" + templateUrl + "\"; not converting \"" + url + "\"");
+                }
+            } else if (url.startsWith("/")) {
+                // Add base URL
+                logger.debug("Add base URL from", templateUrl, "to", url);
+                if (templateUrl.split("/").length === 3) {
+                    url = templateUrl + url;
+                    logger.debug("Base URL:", templateUrl);
+                } else if ((/^(.+:\/\/.+)\//).test(templateUrl)) {
+                    var baseUrl = RegExp.$1;
+                    url = baseUrl + url;
+                    logger.debug("Base URL:", baseUrl);
+                } else {
+                    logger.error("Cannot extract base URL from \"" + templateUrl + "\"; not converting \"" + url + "\"");
+                }
+            } else {
+                logger.error("Unexpected URL; not converting \"" + url + "\"");
+            }
+        }
+
+        return url;
+    }
+
     function urlToPath(url, prefix, ext) {
         ext = ext || "html";
 
@@ -178,21 +211,14 @@
     }
 
     function logQueueContents() {
-        logger.debug("Queue:");
+        logger.debug("Steps (in reverse order):");
         queue.forEach(function (step) {
             logger.debug("-", step.desc);
         });
     };
 
     function addLoginSteps() {
-        queue.unshift({
-            desc: "Load login page",
-            fn: function (options) {
-                page.open(options.login_page);
-
-                return { result: true };
-            }
-        });
+        addLoadPageSteps(options.login_page, "unshift", "login page: " + options.login_page);
 
         queue.unshift({
             desc: "Ensure login fields can be found",
@@ -485,18 +511,35 @@
                         logger.debug("Save resource: " + response.url);
 
                         var isCss = response.url.endsWith(".css");
-                        if (!isCss) {
+                        var isHtml = response.url.endsWith(".html");
+                        if (!isCss || !isHtml) {
                             response.headers.forEach(function (item) {
-                                if (item.name === "Content-Type" && item.value === "text/css") {
-                                    isCss = true;
+                                if (item.name === "Content-Type") {
+                                    if (item.value.startsWith("text/css")) {
+                                        isCss = true;
+                                    } else if (item.value.startsWith("text/html")) {
+                                        isHtml = true;
+                                    }
                                 }
                             });
                         }
+                        logger.debug("isCss", isCss, "isHtml", isHtml);
+                        var path = urlToPath(response.url, options.outputDir);
+
                         if (isCss) {
-                            body = processCss(body);
+                            body = processCss(body, response.url, path, options);
+                        } else if (isHtml) {
+                            body = processHtml(body, path, options);
                         }
 
-                        saveFile(urlToPath(response.url, options.outputDir), body);
+                        saveFile(path, body);
+
+                        if (response.url === options.url || response.url === options.home_page) {
+                            // Save extra copy in the backup root directory for easy access
+                            var path = options.outputDir + "/index.html";
+                            logger.debug("    Save page:", path);
+                            saveFile(path, processHtml(page.content, path, options));
+                        }
                     }
                 };
 
@@ -529,6 +572,8 @@
             }
 
             // TODO: don't break on invalid URLs, e.g. "http://ex*mple.com"
+            href = mergeUrl(page.url, href);
+            logger.debug("= URL \"" + href + "\"");
 
             // If this URL will not be saved, no need to process it either
             var isExcludePage = false;
@@ -542,7 +587,6 @@
                             isExcludePage = true;
                         }
                     } else {
-                        // TODO: deal with relative URL to full URL comparison
                         if (item === href) {
                             isExcludePage = true;
                         }
@@ -570,7 +614,6 @@
                             match = true;
                         }
                     } else {
-                        // TODO: deal with relative URL to full URL comparison
                         if (item === page.url) {
                             onContentPage = true;
                         }
@@ -634,7 +677,6 @@
                         match = true;
                     }
                 } else {
-                    // TODO: deal with relative URL to full URL comparison
                     if (item === href) {
                         match = true;
                     }
@@ -689,58 +731,69 @@
 
         # Process in-page style blocks.
         page.search('style').each do |item|
-          item.content = processCss item.content, @page_uri, path
+          item.content = processCss item.content, @page_uri, path, @options
         end
 
         # Process inline styles.
         page.search('[style]').each do |item|
-          item['style'] = processCss item['style'], @page_uri, path
+          item['style'] = processCss item['style'], @page_uri, path, @options
         end
         */
 
         logger.debug("Process stylesheet links...");
         body = body.replace(/(<link[^>?]+href=)["']([^"']+)["']/g, function (match, prefix, href) {
+            // TODO: refactor these repeated replacer functions
             var ext = "css";
-            logger.debug("process", match, prefix, href);
-            var saveAs = urlToPath(href, options.outputDir, ext);
-            logger.debug("saveAs", saveAs);
+            var url = mergeUrl(page.url, href);
+            var saveAs = urlToPath(url, options.outputDir, ext);
             var newHref = htmlRef(path, saveAs);
-            logger.debug(" HTML link: " + href);
-            logger.debug("Local link: " + newHref);
-            logger.debug("   In path: " + path);
+            logger.debug(" HTML link:", href);
+            logger.debug("  URL link:", url);
+            logger.debug("   Save as:", saveAs);
+            logger.debug("Local link:", newHref);
+            logger.debug("   In path:", path);
             return prefix + "\"" + newHref + "\"";
         });
 
         logger.debug("Process image links...");
         body = body.replace(/(<img[^>?]+src=)["']([^"']+)["']/g, function (match, prefix, src) {
             var ext = "png";   // TODO: may not be correct!
-            var saveAs = urlToPath(src, options.outputDir, ext);
+            var url = mergeUrl(page.url, src);
+            var saveAs = urlToPath(url, options.outputDir, ext);
             var newSrc = htmlRef(path, saveAs);
-            logger.debug(" HTML link: " + src);
-            logger.debug("Local link: " + newSrc);
-            logger.debug("   In path: " + path);
+            logger.debug(" HTML link:", src);
+            logger.debug("  URL link:", url);
+            logger.debug("   Save as:", saveAs);
+            logger.debug("Local link:", newSrc);
+            logger.debug("   In path:", path);
             return prefix + "\"" + newSrc + "\"";
         });
 
         logger.debug("Process JavaScript links...");
         body = body.replace(/(<script[^>?]+src=)["']([^"']+)["']/g, function (match, prefix, src) {
             var ext = "js";
-            var saveAs = urlToPath(src, options.outputDir, ext);
+            var url = mergeUrl(page.url, src);
+            var saveAs = urlToPath(url, options.outputDir, ext);
             var newSrc = htmlRef(path, saveAs);
-            logger.debug(" HTML link: " + src);
-            logger.debug("Local link: " + newSrc);
-            logger.debug("   In path: " + path);
+            logger.debug(" HTML link:", src);
+            logger.debug("  URL link:", url);
+            logger.debug("   Save as:", saveAs);
+            logger.debug("Local link:", newSrc);
+            logger.debug("   In path:", path);
             return prefix + "\"" + newSrc + "\"";
         });
 
         logger.debug("Process iframe links...");
         body = body.replace(/(<iframe[^>?]+src=)["']([^"']+)["']/g, function (match, prefix, src) {
             var ext = "html";
-            var saveAs = urlToPath(src, options.outputDir, ext);
+            var url = mergeUrl(page.url, src);
+            var saveAs = urlToPath(url, options.outputDir, ext);
             var newSrc = htmlRef(path, saveAs);
-            logger.debug(" HTML link: " + src);
-            logger.debug("Local link: " + newSrc);
-            logger.debug("   In path: " + path);
+            logger.debug(" HTML link:", src);
+            logger.debug("  URL link:", url);
+            logger.debug("   Save as:", saveAs);
+            logger.debug("Local link:", newSrc);
+            logger.debug("   In path:", path);
             return prefix + "\"" + newSrc + "\"";
         });
 
@@ -752,8 +805,8 @@
         // TODO
 
         /*
-        def save_resource(ref_uri, in_path, ext='html')
-          saveAs = local_path ref_uri, @options.output_dir, ext
+        def save_resource(refUrl, in_path, ext='html')
+          saveAs = local_path refUrl, @options.output_dir, ext
           new_ref = htmlRef in_path, saveAs
 
           # Don't save pages as resources.
@@ -762,10 +815,10 @@
             @options.content_to_save.each do |item|
               if item.start_with? 'regex:'
                 regex = item['regex:'.length..-1]
-                is_content_page = true if ref_uri.to_s[/#{regex}/i]
+                is_content_page = true if refUrl.to_s[/#{regex}/i]
               else
                 content_uri = @home_uri.merge item
-                is_content_page = true if ref_uri == content_uri
+                is_content_page = true if refUrl == content_uri
               end
             end
           end
@@ -773,10 +826,10 @@
             @options.content_to_save_only_if_linked_from_other_content.each do |item|
               if item.start_with? 'regex:'
                 regex = item['regex:'.length..-1]
-                is_content_page = true if ref_uri.to_s[/#{regex}/i]
+                is_content_page = true if refUrl.to_s[/#{regex}/i]
               else
                 content_uri = @home_uri.merge item
-                is_content_page = true if ref_uri == content_uri
+                is_content_page = true if refUrl == content_uri
               end
             end
           end
@@ -786,7 +839,7 @@
           else
             @logger.log "          As: #{saveAs}"
 
-            process_resource ref_uri, saveAs
+            process_resource refUrl, saveAs
           end
 
           new_ref
@@ -794,34 +847,25 @@
         */
     }
 
-// TODO: convert to JS
-    function processCss(content, ref_uri, ref_path) {
-/*
-      matches = content.scan /url\s*\(\s*['"]?(.+?)['"]?\s*\)/i
-      matches.map! { |m| m = m[0] }
-      matches.uniq.each do |m|
-        next if !m[/^[h\/]/i]   # Skip paths not starting with / or data blocks.
+    function processCss(content, refUrl, refPath, options) {
+        return content.replace(/(url\s*\(\s*['"]?)(.+?)(['"]?\s*\))/gi, function (match, prefix, url, suffix) {
+            // Skip paths not starting with / or data blocks
+            if (!/^[h\/]/i.test(url)) {
+                return prefix + url + suffix;
+            }
 
-        begin
-          uri = ref_uri.merge m
-          @logger.log "Save CSS ref: #{m}"
-          @logger.log "         URI: #{uri}"
+            logger.debug("  CSS link:", url);
 
-          new_ref = save_resource uri, ref_path, 'css'
-          @logger.log "        HTML: #{new_ref}"
-          @logger.log "    (In path: #{ref_path})"
+            var url = mergeUrl(refUrl, url);
+            var saveAs = urlToPath(url, options.outputDir, "css");
+            var newUrl = htmlRef(refPath, saveAs);
+            logger.debug("  URL link:", url);
+            logger.debug("   Save as:", saveAs);
+            logger.debug("Local link:", newUrl);
+            logger.debug("   In path:", refPath);
 
-          content.gsub! m, new_ref
-        rescue Exception => error   # TODO: something more specific?
-          puts "An error occured. Skipping #{uri}"
-          puts error.message if @logger.verbose?
-          puts error.backtrace if @logger.verbose?
-        end
-      end
-
-      content
-      */
-        return content;
+            return prefix + newUrl + suffix;
+        });
     }
 
     function levelPrefix(level) {
@@ -990,15 +1034,7 @@
                 });
             }
 
-            queue.push({
-                desc: "Retrieve " + pageUrl,
-                fn: function (options) {
-                    page.open(pageUrl);
-
-                    // To avoid rate limiting, delay fetching next page.
-                    return { result: true, delay: NEXT_PAGE_DELAY };
-                }
-            });
+            addLoadPageSteps(pageUrl);
 
             if (!completedPreSavePageSetup) {
                 addPreSavePageSetupSteps();
@@ -1041,7 +1077,11 @@
                 return "Save " + page.url + " as index";
             },
             fn: function (options) {
-                var path = options.outputDir + "/index.html";
+                var path = options.outputDir;
+                if (path.charAt(path.length - 1) !== "/") {
+                    path += "/";
+                }
+                path += "index.html";
 
                 logger.debug("    Save page:", path);
                 saveFile(path, processHtml(page.content, path, options));
@@ -1054,15 +1094,58 @@
         logQueueContents();
     }
 
+    function addCorrectUrlArgumentSteps(options) {
+        addLoadPageSteps(options.url, "unshift");
+
+        queue.unshift({
+            desc: "Correct URL option value if needed",
+            fn: function (options) {
+                if (page.url === options.url) {
+                    logger.info("No correction needed");
+                } else {
+                    logger.info("Correct", options.url, "to", page.url);
+                    options.url = page.url;
+                }
+
+                return { result: true };
+            }
+        });
+
+        logger.debug("Add correct URL option value steps");
+        logQueueContents();
+    }
+
+    function addLoadPageSteps(url, method, desc) {
+        method = method || "push";
+        desc = desc || url;
+
+        // Since arguments are used later in time, tie them to this step via a closure
+        (function (pageUrl, method, desc) {
+            queue[method]({
+                desc: "Load " + desc,
+                fn: function (options) {
+                    if (pageUrl === page.url) {
+                        logger.info("Already loaded", pageUrl);
+                        return { result: true };
+                    } else {
+                        page.open(pageUrl);
+
+                        // To avoid rate limiting, delay fetching next page.
+                        return { result: true, delay: NEXT_PAGE_DELAY };
+                    }
+                }
+            });
+        })(url, method, desc);
+    }
+
     function addIntermediateStep(description, callbackFn, callbackArgs) {
         // Since arguments are used later in time, tie them to this step via a closure
-        // TODO: closure needed?
         (function (desc, fn, args) {
             queue.unshift({
                 desc: desc,
                 fn: function (options, logger) {
-                    var result = args ? fn.apply(this, args) : fn(options);
-                    return { result: result !== false, msg: desc + " failed" };
+                    var errorMsg = args ? fn.apply(this, args) : fn(options);
+                    return { result: !errorMsg, msg: errorMsg };
                 }
             });
 
@@ -1118,7 +1201,7 @@
             } else if (!loadInProgress) {
                 currentStep = queue.pop();
                 var desc = currentStep.descFn ? currentStep.descFn() : currentStep.desc;
-                logger.debug("Current step:", desc + "...");
+                logger.debug("* Current step:", desc + "...");
                 if (currentStep.waitFn) {
                     logger.debug("WAIT");
                     waitInProgress = true;
@@ -1155,7 +1238,6 @@
     function captureStart(options) {
         startTime = new Date();
         logger.debug("Start: " + startTime.toLocaleString());
-        logger.info("Saving content to \"" + options.outputDir + "\"");
     }
 
     function captureFinish(options, hideDone) {
@@ -1175,6 +1257,7 @@
     }
 
     module.exports = {
+        addCorrectUrlArgumentSteps: addCorrectUrlArgumentSteps,
         addIntermediateStep: addIntermediateStep,
         addLastStep: addLastStep,
         addLoginSteps: addLoginSteps,
