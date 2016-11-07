@@ -142,13 +142,11 @@
         // Make sure there's a filename
         if (path.charAt(path.length - 1) == "/") {
             path += "index." + ext;
-            extensionLookup[url] = ext;
         }
 
         // Make sure there's an extension (SVGs won't render without it)
         if (!(/\.[^./]+$/).test(path)) {
             path += "." + ext;
-            extensionLookup[url] = ext;
         }
 
         // Avoid file names getting too long; usually systems have 255 chars max
@@ -227,7 +225,7 @@
 
         queue.unshift({
             desc: "Ensure login fields can be found",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 var elts = page.evaluate(function (options) {
                     var formElt = document.querySelector(options.login_form_selector);
                     if (formElt) {
@@ -252,13 +250,13 @@
                     msg += "Could not find login form submit button elt \"" + options.login_form_submit_button_selector + "\"\n";
                 }
 
-                return { result: !msg, msg: msg };
+                callbackFn({ result: !msg, msg: msg });
             }
         });
 
         queue.unshift({
             desc: "Fill out login fields",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 page.evaluate(function(options) {
                     var formElt = document.querySelector(options.login_form_selector);
                     var nameElt = formElt.elements[options.login_form_username_field_name];
@@ -273,13 +271,13 @@
                     nameElt.focus();
                 }, options);
 
-                return { result: true };
+                callbackFn({ result: true });
             }
         });
 
         queue.unshift({
             desc: "Ensure login fields are filled out",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 var result = page.evaluate(function(options) {
                     var formElt = document.querySelector(options.login_form_selector);
                     var nameElt = formElt.elements[options.login_form_username_field_name];
@@ -296,25 +294,25 @@
                     return { result: !msg, msg: msg };
                 }, options);
 
-                return result;
+                callbackFn(result);
             }
         });
 
         queue.unshift({
             desc: "Ensure login button enabled",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 var disabled = page.evaluate(function (options) {
                     var btnElt = document.querySelector(options.login_form_submit_button_selector);
                     return btnElt.hasAttribute("disabled");
                 }, options);
 
-                return { result: !disabled, msg: disabled ? "Login button not enabled after entering credentials" : "" };
+                callbackFn({ result: !disabled, msg: disabled ? "Login button not enabled after entering credentials" : "" });
             }
         });
 
         queue.unshift({
             desc: "Submit login",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 // Authenticate
                 page.evaluate(function(options) {
                     if (options.login_form_submit_via_button) {
@@ -327,13 +325,13 @@
                     }
                 }, options);
 
-                return { result: true };
+                callbackFn({ result: true });
             }
         });
 
         queue.unshift({
             desc: "Check login result",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 var result = page.evaluate(function(options) {
                     var errorElt = document.querySelector(options.login_error_text_selector);
 
@@ -346,7 +344,7 @@
                     return { result: !msg, msg: msg };
                 }, options);
 
-                return result;
+                callbackFn(result);
             },
             waitFn: function (options) {
                 var result = page.evaluate(function(options) {
@@ -378,32 +376,32 @@
 
         queue.unshift({
             desc: "Ensure home page link can be found",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 var exists = page.evaluate(function (options) {
                     var linkElt = document.querySelector(options.homepage_link_selector);
                     return !!linkElt;
                 }, options);
 
-                return { result: exists, msg: exists ? "" : "Could not find home page elt " + options.homepage_link_selector };
+                callbackFn({ result: exists, msg: exists ? "" : "Could not find home page elt " + options.homepage_link_selector });
             }
         });
 
         queue.unshift({
             desc: "Navigate to home page",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 page.evaluate(function (options) {
                     var linkElt = document.querySelector(options.homepage_link_selector);
                     linkElt.click();
                 }, options);
 
-                return { result: true };
+                callbackFn({ result: true });
             }
         });
 
         // Now that there's a page to work with, incorporate the username details
         queue.unshift({
             desc: "Extract username and apply to options",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 // Capture user ID (in case login username != logged-in username)
                 var userId = page.evaluate(function(options) {
                     var regex = new RegExp(options.username_in_homepage_url_regex);
@@ -454,7 +452,7 @@
                     logger.debug("Special linked content to save: " + options.content_to_save_only_if_linked_from_other_content.join(", "));
                 }
 
-                return { result: !!userId, msg: userId ? "" : "Could not extract username " + options.username_in_homepage_url_regex };
+                callbackFn({ result: !!userId, msg: userId ? "" : "Could not extract username " + options.username_in_homepage_url_regex });
             }
         });
 
@@ -465,35 +463,35 @@
     function addLogoutSteps() {
         queue.unshift({
             desc: "Pre-logout page setup",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 page.captureContent = [];
                 page.onResourceReceived = function () {};
 
-                return { result: true };
+                callbackFn({ result: true });
             }
         });
 
         queue.unshift({
             desc: "Ensure logout link can be found",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 var exists = page.evaluate(function (options) {
                     var linkElt = document.querySelector(options.logout_link_selector);
                     return !!linkElt;
                 }, options);
 
-                return { result: exists, msg: exists ? "" : "Could not find logout elt " + options.logout_link_selector };
+                callbackFn({ result: exists, msg: exists ? "" : "Could not find logout elt " + options.logout_link_selector });
             }
         });
 
         queue.unshift({
             desc: "Log out",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 page.evaluate(function (options) {
                     var linkElt = document.querySelector(options.logout_link_selector);
                     linkElt.click();
                 }, options);
 
-                return { result: true };
+                callbackFn({ result: true });
             }
         });
 
@@ -506,9 +504,10 @@
 
         queue.push({
             desc: "Pre-save page setup",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 page.captureContent = [ /css/, /font/, /html/, /image/, /javascript/ ];
                 page.onResourceReceived = function (response) {
+                    logger.debug("onResourceReceived", response.stage, response.status, response.contentType, response.body.length, response.url);
                     if (response.stage === "end" && response.status < 300 && response.body.length > 0) {
                         var body = response.body;
                         delete response.body;   // So it won't be outputted in the logger.debug below
@@ -526,6 +525,11 @@
                         }
                         // TODO: font
 
+                        if (!(/\.[^./]+$/).test(response.url)) {
+                            extensionLookup[response.url] = ext;
+                            logger.debug("Adding extension", ext, "to url", response.url);
+                        }
+
                         var path = urlToPath(response.url, options.outputDir, ext);
                         if (fs.exists(path)) {
                             logger.debug("Already saved resource: " + response.url);
@@ -541,7 +545,6 @@
                                     isHtml = true;
                                 }
                             }
-                            logger.debug("isCss", isCss, "isHtml", isHtml);
 
                             if (isCss) {
                                 body = processCss(body, response.url, path, options);
@@ -554,12 +557,24 @@
                     }
                 };
 
-                return { result: true };
+                callbackFn({ result: true });
             }
         });
 
         logger.debug("Add Pre-save page setup steps");
         logQueueContents();
+    }
+
+    function decodeHtml(html) {
+        var helper = document.createElement("textarea");
+
+        // Redefine function (helper is accessed via closure)
+        decodeHtml = function (html) {
+            helper.innerHTML = html;
+            return helper.value;
+        }
+
+        return decodeHtml(html);
     }
 
     function processHtml(body, path, options) {
@@ -647,8 +662,7 @@
                         if (captureAllPagesInSite) {
                             var inQueue = false;
                             queue.forEach(function (qItem) {
-                                // TODO: how to test if URL is in queue?
-                                if (qItem === origHref) {
+                                if (qItem.pending === origHref) {
                                     inQueue = true;
                                 }
                             });
@@ -707,8 +721,7 @@
                     if (captureAllPagesInSite) {
                         var inQueue = false;
                         queue.forEach(function (qItem) {
-                            // TODO: how to test if URL is in queue?
-                            if (qItem === origHref) {
+                            if (qItem.pending === origHref) {
                                 inQueue = true;
                             }
                         });
@@ -738,7 +751,7 @@
 
         // TODO:
         /*
-        # Avoid HTML entities in certain tags.
+        # Avoid HTML entities in certain tags. See decodeHtml
         tags = [ 'noscript', 'script', 'style' ]
         page.traverse do |node|
           if tags.include? node.name
@@ -760,8 +773,9 @@
         logger.debug("Process stylesheet links...");
         body = body.replace(/(<link[^>]*\shref=)["']([^"']+)["']/g, function (match, prefix, href) {
             // TODO: refactor these repeated replacer functions
-            var ext = "css";
+            href = decodeHtml(href);
             var url = mergeUrl(page.url, href);
+            var ext = "css";
             var saveAs = urlToPath(url, options.outputDir, ext);
             var newHref = htmlRef(path, saveAs);
             logger.debug(" HTML link:", href);
@@ -774,6 +788,7 @@
 
         logger.debug("Process image links...");
         body = body.replace(/(<img[^>]*\ssrc=)["']([^"']+)["']/g, function (match, prefix, src) {
+            src = decodeHtml(src);
             var url = mergeUrl(page.url, src);
             var ext = extensionLookup[url] || "png";
             var saveAs = urlToPath(url, options.outputDir, ext);
@@ -788,8 +803,9 @@
 
         logger.debug("Process JavaScript links...");
         body = body.replace(/(<script[^>]*\ssrc=)["']([^"']+)["']/g, function (match, prefix, src) {
-            var ext = "js";
+            src = decodeHtml(src);
             var url = mergeUrl(page.url, src);
+            var ext = "js";
             var saveAs = urlToPath(url, options.outputDir, ext);
             var newSrc = htmlRef(path, saveAs);
             logger.debug(" HTML link:", src);
@@ -802,8 +818,9 @@
 
         logger.debug("Process iframe links...");
         body = body.replace(/(<iframe[^>]*\ssrc=)["']([^"']+)["']/g, function (match, prefix, src) {
-            var ext = "html";
+            src = decodeHtml(src);
             var url = mergeUrl(page.url, src);
+            var ext = "html";
             var saveAs = urlToPath(url, options.outputDir, ext);
             var newSrc = htmlRef(path, saveAs);
             logger.debug(" HTML link:", src);
@@ -904,7 +921,7 @@
 
         queue.push({
             desc: "Scroll down",
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 var bodyHeight = page.evaluate(function (options) {
                     return document.body.getAttribute("scrollHeight");
                 }, options);
@@ -922,7 +939,7 @@
                     addLazyLoadStep(bodyHeight);
                 }
 
-                return { result: true };
+                callbackFn({ result: true });
             },
             waitFn: function (options) {
                 var result = false;
@@ -956,14 +973,14 @@
             queue.push({
                 desc: "Save " + pageUrl,
                 pending: pageUrl,   // Add reference to URL so it can be found later
-                fn: function (options) {
+                fn: function (options, callbackFn) {
                     // onResourceReceived also saves HTML (even though we don't ask for it), so make sure to overwrite anything that's there already
                     var path = urlToPath(pageUrl, options.outputDir, "html");
 
                     logger.debug("    Save page:", path);
                     saveFile(path, processHtml(page.content, path, options));
 
-                    return { result: true };
+                    callbackFn({ result: true });
                 }
             });
 
@@ -971,7 +988,7 @@
             if (options.lazy_load_on_paths) {
                 queue.push({
                     desc: "Load all content on page",
-                    fn: function (options) {
+                    fn: function (options, callbackFn) {
                         var onContentPage = false
                         options.content_to_save.forEach(function (item) {
                             if (item.indexOf("regex:") === 0) {
@@ -1000,7 +1017,7 @@
                             addLazyLoadStep(bodyHeight);
                         }
 
-                        return { result: true };
+                        callbackFn({ result: true });
                     }
                 });
             }
@@ -1010,7 +1027,7 @@
 
                 queue.push({
                     desc: "Close any dialog box, if present",
-                    fn: function (options) {
+                    fn: function (options, callbackFn) {
                         page.evaluate(function (options) {
                             var elt = document.querySelector(options.click_if_present_on_paths_selector);
                             if (elt) {
@@ -1018,7 +1035,7 @@
                             }
                         }, options);
 
-                        return { result: true };
+                        callbackFn({ result: true });
                     },
                     waitFn: function (options) {
                         var result = false;
@@ -1050,7 +1067,7 @@
             // Serialize queue in case there's an error and save needs to resume
             queue.push({
                 desc: "Save restore point",
-                fn: function (options) {
+                fn: function (options, callbackFn) {
                     // Find URLs left to save
                     var urls = [];
                     queue.forEach(function (item) {
@@ -1063,7 +1080,7 @@
                     var filename = options.outputDir + fs.separator + resumeFilename;
                     fs.write(filename, JSON.stringify(urls));
 
-                    return { result: true };
+                    callbackFn({ result: true });
                 }
             });
 
@@ -1083,7 +1100,7 @@
             descFn: function () {
                 return "Save " + page.url + " as index";
             },
-            fn: function (options) {
+            fn: function (options, callbackFn) {
                 var path = options.outputDir;
                 if (path.charAt(path.length - 1) !== "/") {
                     path += "/";
@@ -1093,7 +1110,7 @@
                 logger.debug("    Save page:", path);
                 saveFile(path, processHtml(page.content, path, options));
 
-                return { result: true };
+                callbackFn({ result: true });
             }
         });
 
@@ -1102,24 +1119,42 @@
     }
 
     function addCorrectUrlArgumentSteps(options) {
-        addLoadPageSteps(options.url, "unshift");
+        /* TODO:
+
+        // Opening the same URL twice will result in the second time not
+        // receiving all resources. The workaround is to make the URL unique;
+        // see https://github.com/ariya/phantomjs/issues/12191
+        var url = "" + options.url;   // Make a copy
+        if (url.indexOf("?") >= 0) {
+            url = url.replace("?", "?cache=bust&");
+        } else {
+            url += "?cache=bust";
+        }
+
+        addLoadPageSteps(url, "unshift");
 
         queue.unshift({
             desc: "Correct URL option value if needed",
-            fn: function (options) {
-                if (page.url === options.url) {
+            fn: function (options, callbackFn) {
+                // Undo workaround first
+                var url = "" + page.url;   // Make a copy
+                url = url.replace("?cache=bust&", "?");
+                url = url.replace("?cache=bust", "");
+
+                if (url === options.url) {
                     logger.info("No correction needed");
                 } else {
-                    logger.info("Correct", options.url, "to", page.url);
-                    options.url = page.url;
+                    logger.info("Correct", options.url, "to", url);
+                    options.url = url;
                 }
 
-                return { result: true };
+                callbackFn({ result: true });
             }
         });
 
         logger.debug("Add correct URL option value steps");
         logQueueContents();
+        */
     }
 
     function addLoadPageSteps(url, method, desc) {
@@ -1128,20 +1163,24 @@
         var firstTime = true;
 
         // Since arguments are used later in time, tie them to this step via a closure
-        (function (pageUrl, method, desc) {
-            queue[method]({
-                desc: "Load " + desc,
-                fn: function (options) {
+        (function (pageUrl, queueMethod, description) {
+            queue[queueMethod]({
+                desc: "Load " + description,
+                fn: function (options, callbackFn) {
                     // (Re-)load page if this is the first time here; onResourceReceived was not in effect before now
                     if (pageUrl === page.url && !firstTime) {
                         logger.info("Already loaded", pageUrl);
                         return { result: true };
                     } else {
                         firstTime = false;
-                        page.open(pageUrl);
-
-                        // To avoid rate limiting, delay fetching next page.
-                        return { result: true, delay: NEXT_PAGE_DELAY };
+                        page.open(pageUrl, function (status) {
+                            if (status === "success") {
+                                // To avoid rate limiting, delay fetching next page.
+                                callbackFn({ result: true, delay: NEXT_PAGE_DELAY });
+                            } else {
+                                callbackFn({ result: false, msg: "Could not load " + pageUrl });
+                            }
+                        });
                     }
                 }
             });
@@ -1153,9 +1192,9 @@
         (function (desc, fn, args) {
             queue.unshift({
                 desc: desc,
-                fn: function (options, logger) {
+                fn: function (options, callbackFn) {
                     var errorMsg = args ? fn.apply(this, args) : fn(options);
-                    return { result: !errorMsg, msg: errorMsg };
+                    callbackFn({ result: !errorMsg, msg: errorMsg });
                 }
             });
 
@@ -1187,7 +1226,7 @@
             if (waitInProgress) {
                 // Check if wait condition is satisfied
                 var expired = (new Date()).getTime() - waitStartTime > maxWaitTime;
-                if (expired || currentStep.waitFn(options, logger)) {
+                if (expired || currentStep.waitFn(options)) {
                     waitInProgress = false;
                     waitStartTime = undefined;
                     currentStep.waitFn = undefined;   // Don't wait again
@@ -1211,29 +1250,30 @@
             } else if (!loadInProgress) {
                 currentStep = queue.pop();
                 var desc = currentStep.descFn ? currentStep.descFn() : currentStep.desc;
-                logger.debug("* Current step:", desc + "...");
+                logger.debug("Current step:", desc + "...");
                 if (currentStep.waitFn) {
                     logger.debug("WAIT");
                     waitInProgress = true;
                     waitStartTime = (new Date()).getTime();
                     setTimeout(doStep, waitDelay);
                 } else {
-                    var result = currentStep.fn(options, logger);
-                    if (result.result) {
-                        // Don't take shortcut and skip delay if queue.length == 0
-                        // as page.open may end up adding new items to queue
-                        // In fact, add extra delay for last page load.
-                        if (queue.length === 0) {
-                            result.delay = maxWaitTime;
+                    currentStep.fn(options, function (result) {
+                        if (result.result) {
+                            // Don't take shortcut and skip delay if queue.length == 0
+                            // as page.open may end up adding new items to queue
+                            // In fact, add extra delay for last page load.
+                            if (queue.length === 0) {
+                                result.delay = maxWaitTime;
+                            }
+                            setTimeout(doStep, result.delay | stepDelay);
+                        } else {
+                            logger.debug("FAIL");
+                            logger.error(result.msg);
+                            logger.debug("A screen shot was saved as \"failed.png\"");
+                            page.render("failed.png");
+                            captureFinish(options, true);
                         }
-                        setTimeout(doStep, result.delay | stepDelay);
-                    } else {
-                        logger.debug("FAIL");
-                        logger.error(result.msg);
-                        logger.debug("A screen shot was saved as \"failed.png\"");
-                        page.render("failed.png");
-                        captureFinish(options, true);
-                    }
+                    });
                 }
             } else {
                 // Sleep
