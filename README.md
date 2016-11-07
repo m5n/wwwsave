@@ -47,11 +47,13 @@ The following sites are supported for use with the -s option:
 
 To view the downloaded content:
 
-* Load <output directory>/index.html in your browser
-* Start a local web server in the <output directory> and load its default URL in your browser, e.g.
+* Load &lt;output directory>/index.html in your browser
+* Start a local web server in the &lt;output directory> and load its default URL in your browser, e.g.
 
-    $ cd <output directory>
+    $ cd &lt;output directory>
+
     $ python -m SimpleHTTPServer 8000
+
     (Load http://localhost:8000 in your browser.)
 
 Because browsers employ various security measures, accessing content even from your own machine may not be allowed.
