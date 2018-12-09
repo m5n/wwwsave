@@ -23,11 +23,11 @@
 
   "content_to_save": [
     "regex:^{{home_page}}",
-    "regex:^http://pics.livejournal.com/{{username}}",
+    "regex:^https?://pics.livejournal.com/{{username}}",
     "http://www.livejournal.com/manage/settings/",
     "http://www.livejournal.com/todo/",
-    "regex:^http://www.livejournal.com/editjournal.bml\\?journal={{username}}",
-    "regex:^http://www.livejournal.com/tools/memories.bml"
+    "regex:^https?://www.livejournal.com/editjournal.bml\\?journal={{username}}",
+    "regex:^https?://www.livejournal.com/tools/memories.bml"
   ],
 
   "content_to_exclude": [

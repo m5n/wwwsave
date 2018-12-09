@@ -2,7 +2,14 @@
 (function () {
     "use strict";
 
+//require.paths.push('.');
+//require.paths.push(fs.workingDirectory + '/node_modules/');
+//console.log(require.paths);
+
     var fs = require("fs");
+    var mime = require("./mime-types/index.js");
+//    var mime = require("mime-types");
+// TODO: use symlinks as part of npm install to avoid shipping mime-type files with wwwsave
     var logger = require("./logger");
     var page = require("webpage").create();
 
@@ -18,6 +25,8 @@
     var queue = [];   // Contains steps to be taken still
     var extensionLookup = {};   // Contains extensions for certain received resources
                                 // (Needed because content type is not known when processing <img> src's for example)
+    var redirectLookup = {};   // Track resource mapping between HTML and actual resource location,
+                               // e.g. <img src="path/img.gif"> actually loads "img.path/img_320.gif"
 
     function init(options) {
         logger.init(options);
@@ -68,6 +77,7 @@
     }
 
     function mergeUrl(templateUrl, url) {
+        url = url.trim();
         if (!url.startsWith("h")) {
             if (url.startsWith("//")) {
                 // Add protocol
@@ -81,16 +91,16 @@
                 }
             } else if (url.startsWith("/")) {
                 // Add base URL
-                logger.debug("Add base URL from", templateUrl, "to", url);
+                logger.debug("Add base URL from:", templateUrl, "to:", url);
                 if ((/^(.+:\/\/[^\/]+)/).test(templateUrl)) {
                     var baseUrl = RegExp.$1;
                     url = baseUrl + url;
-                    logger.debug("Base URL:", baseUrl);
+                    logger.debug("Extracted base URL:", baseUrl);
                 } else {
-                    logger.error("Cannot extract base URL from \"" + templateUrl + "\"; not converting \"" + url + "\"");
+                    logger.error("Cannot extract base URL from:", templateUrl, "; not converting:", url);
                 }
             } else {
-                logger.error("Unexpected URL; not converting \"" + url + "\"");
+                logger.error("Unexpected URL; not converting:", url);
             }
         }
 
@@ -109,19 +119,23 @@
             path = url;
         }
 
-        // Since the query string is made part of the file name (see below),
-        // make sure there are no directory separators in it.
-        var idx = path.indexOf("?");
-        if (idx >= 0) {
-            qs = path.substring(idx).replace(/\//g, "_S_");
-            path = path.substring(0, idx) + qs;
-        }
-
         // Some sites use dynamic concatenation of files by requesting them via
         // the query string, e.g.:
         // http://l-stat.livejournal.net/??lj_base.css,controlstrip-new.css,widgets/calendar.css,widgets/filter-settings.css,popup/popupus.css,popup/popupus-blue.css,lj_base-journal.css,journalpromo/journalpromo_v3.css?v=1417182868
         // So don't chop off the query string, keep it as part of the file name.
-        path = path.replace(/\?/g, "_Q_");
+        var idx = path.indexOf("?");
+        if (idx >= 0) {
+            qs = path.substring(idx).replace(/\?/g, "_Q_").replace(/\//g, "_S_");
+            path = path.substring(0, idx);
+
+            // Move extension, if any, to end of path
+            if ((/(\.[^./]+)$/).test(path)) {
+                qs += RegExp.$1;
+                path = path.substring(0, path.length - RegExp.$1.length);
+            }
+
+            path += qs;
+        }
 
         // Escaped chars could cause trouble, e.g. %20, which is turned into space.
         path = path.replace(/%/g, "_P_");
@@ -145,18 +159,21 @@
         }
 
         // Make sure there's an extension (SVGs won't render without it)
-        if (!(/\.[^./]+$/).test(path)) {
-            path += "." + ext;
-        }
+        var needsExt = !(/\.[^._=/]+$/).test(path);
 
         // Avoid file names getting too long; usually systems have 255 chars max
         var frags = path.split("/");
         for (var ii = 0; ii < frags.length; ii += 1) {
-            if (frags[ii].length > 255) {
-                frags[ii] = frags[ii].substring(0, 255);
+            var max = needsExt ? 255 - 1 - ext.length : 255;
+            if (frags[ii].length > max) {
+                frags[ii] = frags[ii].substring(0, max);
             }
         }
         path = frags.join("/");
+
+        if (needsExt) {
+            path += "." + ext;
+        }
 
         return path.replace(/\//g, fs.separator);   // Make it a local path.
     }
@@ -167,7 +184,8 @@
         var dirs = path.split("/");
         dirs.pop();
         fs.makeTree(dirs.join("/"));
-        fs.write(path, data, "wb");
+        var mode = path.endsWith(".html") ? "w" : "wb";
+        fs.write(path, data, mode);
     /*
         // TODO: use this if using phantomjs instead of slimerjs
         fs.access(path, fs.F_OK | fs.W_OK, function (err) {
@@ -197,9 +215,9 @@
                     });
                 }
                 // Dir now exists; just write out the file.
-                logger.debug('write file ' + path);
+                logger.debug("write file " + path);
                 fs.writeFile(path, data, function (error) {
-                    logger.debug('fs.writeFile callback');
+                    logger.debug("fs.writeFile callback");
                     if (error) {
                         logger.error("write error:  " + error.message);
                     } else {
@@ -214,13 +232,18 @@
     }
 
     function logQueueContents() {
-        logger.debug("Steps (in reverse order):");
-        queue.forEach(function (step) {
-            logger.debug("-", step.desc);
+        logger.debug("Steps:");
+
+        // Queue contains steps in reverse order, so reverse printing too
+        var out = '';
+        queue.forEach(function (step, index) {
+            out = "- " + step.desc + (index === 0 ? "" : "\n") + out;
         });
+
+        logger.debug(out);
     };
 
-    function addLoginSteps() {
+    function addLoginSteps(options) {
         addLoadPageSteps(options.login_page, "unshift", "login page: " + options.login_page);
 
         queue.unshift({
@@ -499,21 +522,47 @@
         logQueueContents();
     }
 
+    function contentTypeToExtension(contentType) {
+        var ext = mime.extension(contentType);
+        if (!ext) {
+            if ((/javascript/).test(contentType)) {   // JS
+                ext = 'js';
+            } else {
+                logger.error('Unknown extension for ' + contentType);
+            }
+        }
+        return ext;
+    }
+
     function addPreSavePageSetupSteps() {
         completedPreSavePageSetup = true;
 
         queue.push({
-            desc: "Pre-save page setup",
+            desc: "Internal pre-save page object setup",
             fn: function (options, callbackFn) {
                 page.captureContent = [ /css/, /font/, /html/, /image/, /javascript/ ];
                 page.onResourceReceived = function (response) {
-                    logger.debug("onResourceReceived", response.stage, response.status, response.contentType, response.body.length, response.url);
+                    logger.debug("onResourceReceived", response.stage, response.status, response.contentType, response.contentType ? contentTypeToExtension(response.contentType) : '', response.body.length, response.url);
+                    if (response.stage === "end" && response.status < 300 && response.body.length === 0) {
+                        logger.debug("got 0 body... complete response:", JSON.stringify(response));
+                    }
                     if (response.stage === "end" && response.status < 300 && response.body.length > 0) {
                         var body = response.body;
                         delete response.body;   // So it won't be outputted in the logger.debug below
                         logger.debug("Resource received:", response.url, JSON.stringify(response));
 
-                        var ext;
+                        var url = redirectLookup[response.url];
+                        if (url) {
+                            delete redirectLookup[response.url];
+                            logger.debug("Store redirected resource as:", url);
+                            logger.debug("#redirectLookup entries:", Object.keys(redirectLookup).length, JSON.stringify(redirectLookup));
+                        } else {
+                            url = response.url;
+                        }
+
+                        var ext = contentTypeToExtension(response.contentType);
+/*
+TODO: perhaps use this in the cT2E function if lib cannot find it
                         // SVGs don't load without a file extension...
                         // map each of the captureContent items to an extension
                         if ((/image\/(\w+)/).test(response.contentType)) {   // Image, even image/svg+xml
@@ -524,20 +573,21 @@
                             ext = "js";
                         }
                         // TODO: font
+*/
 
-                        if (!(/\.[^./]+$/).test(response.url)) {
-                            extensionLookup[response.url] = ext;
-                            logger.debug("Adding extension", ext, "to url", response.url);
+                        if (!(/\.[^./]+$/).test(url)) {
+                            extensionLookup[url] = ext;
+                            logger.debug("Using extension", ext, "for url", url);
                         }
 
-                        var path = urlToPath(response.url, options.outputDir, ext);
+                        var path = urlToPath(url, options.outputDir, ext);
                         if (fs.exists(path)) {
-                            logger.debug("Already saved resource: " + response.url);
+                            logger.debug("Already saved resource: " + url);
                         } else {
-                            logger.debug("Save resource: " + response.url);
+                            logger.debug("Save resource: " + url);
 
-                            var isCss = response.url.endsWith(".css");
-                            var isHtml = response.url.endsWith(".html");
+                            var isCss = url.endsWith(".css") || response.url.endsWith(".css");
+                            var isHtml = url.endsWith(".html") || response.url.endsWith(".html");
                             if (!isCss || !isHtml) {
                                 if (response.contentType.startsWith("text/css")) {
                                     isCss = true;
@@ -547,13 +597,24 @@
                             }
 
                             if (isCss) {
-                                body = processCss(body, response.url, path, options);
+                                body = processCss(body, url, path, options);
                             } else if (isHtml) {
                                 body = processHtml(body, path, options);
                             }
 
                             saveFile(path, body);
                         }
+                    } else if (response.stage === "end" && response.status === 302) {
+                        logger.debug("Is redirect:", JSON.stringify(response));
+                        var origUrl = redirectLookup[response.url];
+                        if (origUrl) {
+                            delete redirectLookup[response.url]
+                        } else {
+                            origUrl = response.url;
+                        }
+                        redirectLookup[response.redirectURL] = origUrl;
+                        logger.debug("Redirect url", response.redirectURL, "to be stored as", origUrl);
+                        logger.debug("#redirectLookup entries:", Object.keys(redirectLookup).length, JSON.stringify(redirectLookup));
                     }
                 };
 
@@ -583,23 +644,26 @@
             var resultHref = origHref;
             var unprocessed = prefix + "\"" + href + "\"";
 
-            logger.debug("Replace \"" + href + "\"");
-
             // Skip empty URLs
             if (!href) {
-                logger.debug("Skip empty URLs");
+                logger.debug("Skip empty URLs:", href);
                 return unprocessed;
             }
 
             // Skip in-page anchors
             if (href.charAt(0) === "#") {
-                logger.debug("Skip in-page anchors");
+                logger.debug("Skip in-page anchors:", href);
                 return unprocessed;
             }
 
             // TODO: don't break on invalid URLs, e.g. "http://ex*mple.com"
             href = mergeUrl(page.url, href);
-            logger.debug("= URL \"" + href + "\"");
+            if (href !== origHref) {
+                logger.debug("Replace \"" + origHref + "\"");
+                logger.debug("    ==> \"" + href + "\"");
+            }
+
+            logger.debug("Processing \"" + href + "\"");
 
             if (options.url) {
                 // Use full URLs wherever possible if user only saves a single page,
@@ -629,8 +693,6 @@
                 logger.debug("Skip excluded pages");
                 return unprocessed;
             }
-
-            logger.debug("Not an excluded page");
 
             var onContentPage = false;
             if (options.content_to_save) {
@@ -687,7 +749,7 @@
 
             // Only process if it's a reference off of an included page
             if (!onContentPage) {
-                logger.debug("Skip references off of non-content pages");
+                logger.debug("Skip non-content pages");
                 return unprocessed;
             }
 
@@ -785,12 +847,25 @@
             logger.debug("   In path:", path);
             return prefix + "\"" + newHref + "\"";
         });
+        // Remove integrity checks from links
+        body = body.replace(/(<link[^>]*\s)(integrity=)/g, function (match, prefix, attr) {
+            return prefix + "xx-" + attr;
+        });
 
         logger.debug("Process image links...");
         body = body.replace(/(<img[^>]*\ssrc=)["']([^"']+)["']/g, function (match, prefix, src) {
             src = decodeHtml(src);
             var url = mergeUrl(page.url, src);
-            var ext = extensionLookup[url] || "png";
+            var ext = extensionLookup[url];
+            if (!ext) {
+                // TODO: only works if URL was already received, which is only the case after entire page is loaded
+                //       delay this processing until later?
+                // 1. load page
+                // 2. wait until !loadInProgress
+                // 3. process HTML page
+                logger.error("Unknown extension, using png as default but shouldn't");
+                ext = "png";
+            }
             var saveAs = urlToPath(url, options.outputDir, ext);
             var newSrc = htmlRef(path, saveAs);
             logger.debug(" HTML link:", src);
@@ -814,6 +889,10 @@
             logger.debug("Local link:", newSrc);
             logger.debug("   In path:", path);
             return prefix + "\"" + newSrc + "\"";
+        });
+        // Remove integrity checks from scripts
+        body = body.replace(/(<script[^>]*\s)(integrity=)/g, function (match, prefix, attr) {
+            return prefix + "xx-" + attr;
         });
 
         logger.debug("Process iframe links...");
@@ -1193,8 +1272,9 @@
             queue.unshift({
                 desc: desc,
                 fn: function (options, callbackFn) {
-                    var errorMsg = args ? fn.apply(this, args) : fn(options);
-                    callbackFn({ result: !errorMsg, msg: errorMsg });
+                    var result = args ? fn.apply(this, args) : fn(options);   // TODO: just do fn.apply(this, args)?
+                    result = result || {};
+                    callbackFn({ result: !result.msg, msg: result.msg, skipScreenshot: result.skipScreenshot });
                 }
             });
 
@@ -1212,7 +1292,7 @@
         var currentStep;
         var stepDelay = 100;
         var waitDelay = 250;
-        var maxWaitTime = 7500;
+        var maxWaitTime = 4500;
         var waitInProgress = false;
         var waitStartTime;
 
@@ -1220,8 +1300,12 @@
 
         function doStep() {
             if (!waitInProgress && !loadInProgress && queue.length === 0) {
+                if (Object.keys(redirectLookup).length !== 0) {
+                    logger.error("Still some unresolved redirects", JSON.stringify(redirectLookup));
+                }
                 logger.debug("DONE");
                 captureFinish(options);
+                return;
             }
             if (waitInProgress) {
                 // Check if wait condition is satisfied
@@ -1248,6 +1332,9 @@
                 }
                 setTimeout(doStep, waitDelay);
             } else if (!loadInProgress) {
+                if (Object.keys(redirectLookup).length !== 0) {
+                    logger.error("Still some unresolved redirects", JSON.stringify(redirectLookup));
+                }
                 currentStep = queue.pop();
                 var desc = currentStep.descFn ? currentStep.descFn() : currentStep.desc;
                 logger.debug("Current step:", desc + "...");
@@ -1263,14 +1350,22 @@
                             // as page.open may end up adding new items to queue
                             // In fact, add extra delay for last page load.
                             if (queue.length === 0) {
+                                // TODO: queue includes logout steps, but maxWaitTime should happen before logout,
+                                //       so perhaps move "addLogoutSteps" here or better: add "wait for done" steps
+                                //       which delays next steps (logoutSteps) until some delay/no more resources are loaded
+                                //       TODO: how to tell # resources still left to download? Keep track ourselves? N/A, loadInProgress is false only after all resources are loaded
                                 result.delay = maxWaitTime;
                             }
-                            setTimeout(doStep, result.delay | stepDelay);
+                            setTimeout(doStep, result.delay || stepDelay);
                         } else {
-                            logger.debug("FAIL");
+                            if (!result.skipScreenshot) {
+                                logger.debug("FAIL");
+                            }
                             logger.error(result.msg);
-                            logger.debug("A screen shot was saved as \"failed.png\"");
-                            page.render("failed.png");
+                            if (!result.skipScreenshot) {
+                                logger.debug("A screen shot was saved as \"failed.png\"");
+                                page.render("failed.png");
+                            }
                             captureFinish(options, true);
                         }
                     });
@@ -1293,8 +1388,9 @@
     function captureFinish(options, hideDone) {
         var endTime = new Date();
         var elapsed = (endTime.getTime() - startTime.getTime()) / 1000;
+        var elapsedStr = Math.floor(elapsed / 60) + "m" + Math.round(elapsed - Math.floor(elapsed / 60) * 60) + "s";
         logger.debug("End: " + endTime.toLocaleString());
-        logger.info("Elapsed: " + Math.floor(elapsed / 60) + "m" + Math.round(elapsed - Math.floor(elapsed / 60) * 60) + "s");
+        logger.info("Elapsed: " + elapsedStr);
 
         if (!hideDone) {
             logger.debug("Removing resume file");
@@ -1303,7 +1399,7 @@
             logger.info("Done!");
         }
 
-        finalStepCallbackFn(!hideDone);
+        finalStepCallbackFn(!hideDone, elapsedStr);
     }
 
     module.exports = {

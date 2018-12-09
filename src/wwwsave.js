@@ -40,7 +40,12 @@
         }
     }
 
-    function processScraperResult(result) {
+    function processScraperResult(result, elapsedTimeStr) {
+        var filename = options.outputDir + fs.separator + "README.txt";
+        var file = fs.open(filename, "a");
+        file.writeLine("Took: " + elapsedTimeStr);
+        file.close();
+
         if (result) {
             phantom.exit(0);
         } else {
@@ -49,8 +54,6 @@
     }
 
     function initOutputDir() {
-        logger.info("Saving content to \"" + options.outputDir + "\"");
-
         var exists = fs.exists(options.outputDir);
         logger.debug("Output dir exists?", exists);
 
@@ -92,7 +95,7 @@
 
         // Do login before creating directories as an error could still occur.
         if (options.loginRequired) {
-            scraper.addLoginSteps();
+            scraper.addLoginSteps(options);
         }
 
         if (options.url) {
@@ -107,6 +110,18 @@
                 if (options.siteId) {
                     suffix = options.siteId;
                 } else if (options.url) {
+                    var url = options.url;
+
+                    // TODO: create URL parser
+                    if (!/^.+:\/\//.test(options.url)) {
+                        if (!/^\//.test(options.url)) {
+                            options.url = "/" + options.url;
+                        }
+
+                        options.url = "http:/" + options.url;
+                        logger.debug("Corrected url arg to " + options.url);
+                    }
+
                     (/^.+:\/\/([^\/]+)/).test(options.url);
                     suffix = RegExp.$1;
                 }
@@ -114,11 +129,17 @@
             });
         }
 
+        scraper.addIntermediateStep("Show output directory", function () {
+            logger.info("Saving content to \"" + options.outputDir + "\"");
+        });
+
         if (!options.resume && !options.forceOverwrite) {
             scraper.addIntermediateStep("Make sure output directory does not already exist", function () {
                 if (fs.exists(options.outputDir)) {
-                    return "Output directory exists (use -f option to append data)";
-                    // TODO: this ends up taking a screenshot... avoid that
+                    return {
+                        msg: "Output directory exists (use -f option to append data)",
+                        skipScreenshot: true
+                    };
                 }
             });
         }

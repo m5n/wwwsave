@@ -2,25 +2,47 @@
 
 # TODO: make wwwsave.bat
 
-# The SQL files are generated via Perl, so make sure it's installed.
-SLIMER=`which slimerjs`
-if [ "$SLIMER" = "" ]; then
-    echo "Install SlimerJS and/or make it available in \$PATH"
-    exit 1
-fi
+NODEJS="nodejs"
+SLIMERJS="slimerjs"
+REQUIRED="$NODEJS $SLIMERJS"
 
-# Options for wwwsave may be the same as options for the automation framework
-# (e.g. -h or -v) so make all options unique.
+# Check dependencies
+for DEP in $REQUIRED; do
+    if [ "`which $DEP`" = "" ]; then
+        echo "Make sure $DEP is available in \$PATH"
+        exit 1
+    fi
+done
+
+# Avoid wwwsave options being identical to those of the automation framework
 OPTIONS=""
+VERBOSE=""
 for ARG in $@; do
-    PREFIX=$(echo "$ARG" | awk '{print substr($1, 0, 1)}')
-    if [ "$PREFIX" = "-" ]; then
+    # Avoid forking external process; see https://stackoverflow.com/a/49481745
+    FIRSTCHAR=$(echo "${ARG%${ARG#?}}")
+    if [ "$FIRSTCHAR" = "-" ]; then
         OPTIONS="$OPTIONS wwwsave$ARG"
     else
         OPTIONS="$OPTIONS $ARG"
     fi
+    if [ "$ARG" = "-v" ]; then
+        VERBOSE="1"
+    fi
 done
 
-CMD="slimerjs src/wwwsave.js$OPTIONS"
-$CMD
+# TODO: FF must be < 60; see https://github.com/laurentj/slimerjs/issues/694
+#       Should be fixed in SlimerJS 1.0.1
+#       Downloaded FF from https://ftp.mozilla.org/pub/firefox/releases/59.0/
+export SLIMERJSLAUNCHER="./firefox/firefox"
+echo "*** Using local `$SLIMERJSLAUNCHER -v`"
 
+# Run application
+CMD="$SLIMERJS src/wwwsave.js$OPTIONS"
+if [ "$VERBOSE" ]; then
+    # Prevent too much non-wwwsave output
+    CMD="$CMD --ssl-protocol=any --debug=true"
+    echo $CMD
+else
+    CMD="$CMD --ssl-protocol=any --headless"
+fi
+$CMD
