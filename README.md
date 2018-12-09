@@ -1,6 +1,8 @@
 wwwsave
 =======
 
+<h1>Still a work in progress</h1>
+
 Usage
 -----
 Usage: ./wwwsave [options]
@@ -69,11 +71,11 @@ Framework choice
 ----------------
 Finding the right scraping framework wasn't easy. I initially wanted this to be a Ruby project, so Mechanize seemed like the logical choice. But as many modern web sites dynamically alter the page HTML using JavaScript, Mechanize fell through as it does not execute JavaScript.
 
-Then I realized a browser testing framework may work better. Using an actual browser, Watir captures exactly what the user sees. I even improved performance by using Typhoeus for downloading the in-page resources. In the end, though, Watir cannot be instructed to save an image on a page. (A hybrid approach where Watir saves only the page HTML and Mechanize/Typhoeus saves all assets (JS, CSS, images, etc) also didn't work as HttpOnly cookies are (rightly) not exposed outside of the Watir internals and so cannot be accessed. (Unfortunately, sites like LiveJournal requires HttpOnly cookies to access certain assets, e.g. scrapbook images, so this inability was a show-stopper.))
+Then I realized a browser testing framework may work better. Using an actual browser, Watir captures exactly what the user sees. I even improved performance by using Typhoeus for downloading the in-page resources. In the end, though, Watir cannot be instructed to save an image on a page. (A hybrid approach where Watir saves only the page HTML and Mechanize/Typhoeus saves all assets (JS, CSS, images, etc) also didn't work as HttpOnly cookies are (rightly) not exposed outside of the Watir internals and so cannot be accessed. (Sites like LiveJournal require HttpOnly cookies to access certain assets, e.g. scrapbook images, so this inability was a show-stopper.))
 
 Then I realized my approach was inefficient: the browser already downloaded all assets, so why download them again programmatically? Looking at headless browsers with full JavaScript support, PhantomJS seemed promising, but it does not give access to the response body--[not yet](https://github.com/ariya/phantomjs/issues/13908) perhaps in [v2.2](https://github.com/ariya/phantomjs/issues/13937). Luckily, SlimerJS has added support for accessing the response body, so the Ruby code was ported to JavaScript.
 
-So far, all is well!
+Unfortunately I ran into an issue with SlimerJS where certain requests were aborted (LiveJournal scrapbook images), resulting in a non-zero Content-Length but 0-length response body. There's no workaround and with PhantomJS being abandoned, am looking at using headless Firefox or Chrome.
 
 
 Developer setup
